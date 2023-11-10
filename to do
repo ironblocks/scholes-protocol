@@ -1,0 +1,15 @@
+- Refactor exercise and settle
+  1. Cash out collaterals immediately after exercise or settle
+  2. Cashout based on availability, not minting (actually works out the same)
+
+- Post-expiration liquidation level
+- Revise mint/burn on exercise and settlement
+- Revise ability of owner to exercise/settle at expiration
+- Create fee structure
+
+Open issues to discuss:
+  - Does the liquidator pay premium to the liquidated holder?
+  - Fee structure
+  - Collateral requirements
+  - Option minting authorization filter (anyone can mint, but at restricted strikes); write discovery and authorization functions!
+  - Premiums are transferred before the options, effectively the premium can be used as entry collateral

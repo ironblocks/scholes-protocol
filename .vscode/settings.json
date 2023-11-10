@@ -1,0 +1,15 @@
+{
+  "solidity.packageDefaultDependenciesContractsDirectory": "src",
+  "solidity.packageDefaultDependenciesDirectory": "lib",
+  "cSpell.words": [
+    "chakra",
+    "collateralization",
+    "collateralized",
+    "counterparties",
+    "counterparty",
+    "permissionlessly",
+    "Premia",
+    "Scholes",
+    "undercollateralization"
+  ]
+}
