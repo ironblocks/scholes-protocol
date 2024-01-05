@@ -22,11 +22,53 @@ contract Deploy is Script {
     address constant account2 = 0x264F92eac76DA3244EDc7dD89eC3c7AcC719BE2a;
     address constant account3 = 0x4eBBf92803dfb004b543d4DB592D9C32C0a830A9;
 
-    address constant chainlinkEthUsd = 0x62CAe0FA2da220f43a51F86Db2EDb36DcA9A5A08; // on Arbitrum Görli
-    address constant chainlinkBtcUsd = 0x6550bc2301936011c1334555e62A87705A81C12C; // on Arbitrum Görli
-    // address constant chainlinkEthUsd = 0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612; // on Arbitrum One Mainnet
+    // Networks we are deploying to
+    uint256 constant SEPOLIA_CHAINID = 11155111; // Sepolia
+
+    uint256 constant ARBITRUM_ONE_CHAINID = 42161; // Arbitrum One Mainnet
+    uint256 constant ARBITRUM_GORLI_CHAINID = 421613; // Arbitrum Görli - deprecated
+    uint256 constant ARBITRUM_SEPOLIA_CHAINID = 421614; // Arbitrum Sepolia Testnet
+
+    uint256 constant BASE_CHAINID = 8453; // Base Mainnet
+    uint256 constant BASE_SEPOLIA_CHAINID = 84532; // Base Sepolia Testnet
+
+    uint256 constant OP_CHAINID = 10; // Optimism Mainnet
+    uint256 constant OP_SEPOLIA_CHAINID = 11155420; // Optimism Sepolia Testnet
+
+    // Use https://www.unixtimestamp.com/ to get the timestamp for the expiration dates
+    uint256 constant EXPIRATION_1 = 1714579200; // Wed May 01 2024 16:00:00 GMT+0000
+    uint256 constant EXPIRATION_2 = 1706806800; // Thu Feb 01 2024 17:00:00 GMT+0000
+    uint256 constant EXPIRATION_3 = 1709312400; // Fri Mar 01 2024 17:00:00 GMT+0000
+    uint256 constant EXPIRATION_4 = 1711987200; // Mon Apr 01 2024 16:00:00 GMT+0000
+
+    // Chainlink oracles
+    address chainlinkEthUsd;
+    address chainlinkBtcUsd;
+
+    function init() internal {
+        if (block.chainid == ARBITRUM_GORLI_CHAINID) {
+            chainlinkEthUsd = 0x62CAe0FA2da220f43a51F86Db2EDb36DcA9A5A08;
+            chainlinkBtcUsd = 0x6550bc2301936011c1334555e62A87705A81C12C;
+        } else if (block.chainid == SEPOLIA_CHAINID) {
+            chainlinkEthUsd = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
+            chainlinkBtcUsd = 0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43;
+        } else if (block.chainid == ARBITRUM_SEPOLIA_CHAINID) {
+            chainlinkEthUsd = 0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165;
+            chainlinkBtcUsd = 0x56a43EB56Da12C0dc1D972ACb089c06a5dEF8e69;
+        } else if (block.chainid == BASE_CHAINID) {
+            chainlinkEthUsd = 0x0;
+            chainlinkBtcUsd = 0x56a43EB56Da12C0dc1D972ACb089c06a5dEF8e69;
+            revert("No chainlink oracle for BTC/USD on Base yet");
+        } else if (block.chainid == BASE_SEPOLIA_CHAINID) {
+            chainlinkEthUsd = 0x0;
+            chainlinkBtcUsd = 0x0;
+            revert("No chainlink test oracles for Base yet");
+        } else revert("Uninitialized oracle addresses for this chainid");
+    }
 
     function run() external {
+        init();
+
         // uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(); /*deployerPrivateKey*/
 
@@ -118,7 +160,8 @@ contract Deploy is Script {
         opt.underlying = WETH;
         opt.base = USDC;
         opt.strike = 2000 * 10 ** oracleEthUsd.decimals();
-        opt.expiration = 1704103200; // January 1, 2024 23:00:00 GMT would be 1704103200
+        opt.expiration = EXPIRATION_1;
+
         opt.isCall = true;
         opt.isAmerican = false;
         opt.isLong = true;
@@ -130,6 +173,34 @@ contract Deploy is Script {
         console.log("Long Option Id:", oid);
         require(keccak256("WETH") == keccak256(abi.encodePacked(options.getUnderlyingToken(oid).symbol())), "WETH symbol mismatch"); // Check
         require(opt.expiration == options.getExpiration(oid), "Expiration mismatch"); // Double-check
+
+        if (keccak256(bytes(vm.envString("CREATE_TEST_ORDERS"))) == keccak256(bytes("yes"))) {
+            console.log("Creating some test orders");
+
+            vm.stopBroadcast();
+
+            vm.startBroadcast(vm.envUint("PRIVATE_KEY_1"));
+            USDC.approve(address(collaterals), type(uint256).max);
+            WETH.approve(address(collaterals), type(uint256).max);
+            collaterals.deposit(oid, 10000 * 10**USDC.decimals(), 10 ether);
+            ob.make(-1 ether, 3 ether, mockTimeOracle.getTime() + 7 * 24 * 60 * 60 /* 7 days */);
+            ob.make(-2 ether, 1 ether, mockTimeOracle.getTime() + 7 * 24 * 60 * 60 /* 7 days */);
+            ob.make(-1 ether, 2 ether, mockTimeOracle.getTime() + 7 * 24 * 60 * 60 /* 7 days */);
+            ob.make(-1 ether, 1 ether, mockTimeOracle.getTime() + 7 * 24 * 60 * 60 /* 7 days */);
+            vm.stopBroadcast();
+
+            vm.startBroadcast(vm.envUint("PRIVATE_KEY_2"));
+            USDC.approve(address(collaterals), type(uint256).max);
+            WETH.approve(address(collaterals), type(uint256).max);
+            collaterals.deposit(oid, 10000 * 10**USDC.decimals(), 10 ether);
+            ob.make(3 ether, 2 ether, mockTimeOracle.getTime() + 7 * 24 * 60 * 60 /* 7 days */);
+            ob.make(2 ether, 3 ether, mockTimeOracle.getTime() + 7 * 24 * 60 * 60 /* 7 days */);
+            ob.make(1 ether, 1 ether, mockTimeOracle.getTime() + 7 * 24 * 60 * 60 /* 7 days */);
+            ob.make(2 ether, 2 ether, mockTimeOracle.getTime() + 7 * 24 * 60 * 60 /* 7 days */);
+            vm.stopBroadcast();
+            
+            vm.startBroadcast(); /*deployerPrivateKey*/
+        }
         }
 
         // Some more test options
@@ -138,7 +209,7 @@ contract Deploy is Script {
         opt.underlying = WETH;
         opt.base = USDC;
         opt.strike = 2000 * 10 ** oracleEthUsd.decimals();
-        opt.expiration = 1696208000; // October 1, 2023 woruld be 1696208000
+        opt.expiration = EXPIRATION_2;
         opt.isCall = true;
         opt.isAmerican = false;
         opt.isLong = true;
@@ -151,7 +222,7 @@ contract Deploy is Script {
         opt.underlying = WETH;
         opt.base = USDC;
         opt.strike = 2000 * 10 ** oracleEthUsd.decimals();
-        opt.expiration = 1698889600; // November 1, 2023 would be 1698889600
+        opt.expiration = EXPIRATION_3;
         opt.isCall = true;
         opt.isAmerican = false;
         opt.isLong = true;
@@ -164,7 +235,7 @@ contract Deploy is Script {
         opt.underlying = WETH;
         opt.base = USDC;
         opt.strike = 2000 * 10 ** oracleEthUsd.decimals();
-        opt.expiration = 1701472000; // December 1, 2023 would be 1701472000
+        opt.expiration = EXPIRATION_4;
         opt.isCall = true;
         opt.isAmerican = false;
         opt.isLong = true;
@@ -177,7 +248,7 @@ contract Deploy is Script {
         opt.underlying = WETH;
         opt.base = USDC;
         opt.strike = 2000 * 10 ** oracleEthUsd.decimals();
-        opt.expiration = 1704103200; // January 1, 2024 23:00:00 GMT would be 1704103200
+        opt.expiration = EXPIRATION_1;
         opt.isCall = false;
         opt.isAmerican = false;
         opt.isLong = true;
@@ -190,7 +261,7 @@ contract Deploy is Script {
         opt.underlying = WETH;
         opt.base = USDC;
         opt.strike = 2000 * 10 ** oracleEthUsd.decimals();
-        opt.expiration = 1696208000; // October 1, 2023 woruld be 1696208000
+        opt.expiration = EXPIRATION_2;
         opt.isCall = false;
         opt.isAmerican = false;
         opt.isLong = true;
@@ -203,7 +274,7 @@ contract Deploy is Script {
         opt.underlying = WETH;
         opt.base = USDC;
         opt.strike = 2000 * 10 ** oracleEthUsd.decimals();
-        opt.expiration = 1698889600; // November 1, 2023 would be 1698889600
+        opt.expiration = EXPIRATION_3;
         opt.isCall = false;
         opt.isAmerican = false;
         opt.isLong = true;
@@ -216,7 +287,7 @@ contract Deploy is Script {
         opt.underlying = WETH;
         opt.base = USDC;
         opt.strike = 2000 * 10 ** oracleEthUsd.decimals();
-        opt.expiration = 1701472000; // December 1, 2023 would be 1701472000
+        opt.expiration = EXPIRATION_4;
         opt.isCall = false;
         opt.isAmerican = false;
         opt.isLong = true;
@@ -229,7 +300,7 @@ contract Deploy is Script {
         opt.underlying = WBTC;
         opt.base = USDC;
         opt.strike = 35000 * 10 ** oracleBtcUsd.decimals();
-        opt.expiration = 1704103200; // January 1, 2024 23:00:00 GMT would be 1704103200
+        opt.expiration = EXPIRATION_1;
         opt.isCall = true;
         opt.isAmerican = false;
         opt.isLong = true;

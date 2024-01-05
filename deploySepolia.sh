@@ -6,10 +6,10 @@
 source .env
 
 # Create some test orders
-export CREATE_TEST_ORDERS="yes"
+export CREATE_TEST_ORDERS="no"
 
 # To deploy and verify our contract
-forge script script/DeployAnywhere.s.sol:Deploy --rpc-url "http://127.0.0.1:8545/" --sender $SENDER --private-key $PRIVATE_KEY --broadcast -v
+forge script script/DeployAnywhere.s.sol:Deploy --rpc-url $SEPOLIA_RPC --sender $SENDER --private-key $PRIVATE_KEY --broadcast -v
 
 source push_artifacts.sh "DeployAnywhere.s.sol/11155111"
 

@@ -9,9 +9,9 @@ source .env
 export CREATE_TEST_ORDERS="no"
 
 # To deploy and verify our contract
-forge script script/DeployAnywhere.s.sol:Deploy --rpc-url $ARBITRUM_GOERLI_RPC --sender $SENDER --private-key $PRIVATE_KEY --broadcast -v
+forge script script/DeployAnywhere.s.sol:Deploy --rpc-url $ARBITRUM_SEPOLIA_RPC --sender $SENDER --private-key $PRIVATE_KEY --broadcast -v
 
-source push_artifacts.sh "DeployAnywhere.s.sol/421613"
+source push_artifacts.sh "DeployAnywhere.s.sol/421614"
 
 # cd web
 # npm run build
