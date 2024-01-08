@@ -56,12 +56,12 @@ contract Deploy is Script {
             chainlinkEthUsd = 0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165;
             chainlinkBtcUsd = 0x56a43EB56Da12C0dc1D972ACb089c06a5dEF8e69;
         } else if (block.chainid == BASE_CHAINID) {
-            chainlinkEthUsd = 0x0;
+            chainlinkEthUsd = 0x0000000000000000000000000000000000000000;
             chainlinkBtcUsd = 0x56a43EB56Da12C0dc1D972ACb089c06a5dEF8e69;
             revert("No chainlink oracle for BTC/USD on Base yet");
         } else if (block.chainid == BASE_SEPOLIA_CHAINID) {
-            chainlinkEthUsd = 0x0;
-            chainlinkBtcUsd = 0x0;
+            chainlinkEthUsd = 0x0000000000000000000000000000000000000000;
+            chainlinkBtcUsd = 0x0000000000000000000000000000000000000000;
             revert("No chainlink test oracles for Base yet");
         } else revert("Uninitialized oracle addresses for this chainid");
     }
