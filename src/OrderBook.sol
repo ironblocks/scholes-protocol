@@ -104,7 +104,7 @@ contract OrderBook is IOrderBook, ERC1155Holder {
             takes(msg.sender, makers[index].id, makers[index].amount, makers[index].price);
         }
         // Make
-        if (toMake.amount > 0) {
+        if (toMake.amount != 0) {
             id = makes(msg.sender, toMake.amount, toMake.price, toMake.expiration);
         }
     }

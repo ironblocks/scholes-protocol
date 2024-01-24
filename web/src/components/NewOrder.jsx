@@ -175,8 +175,8 @@ function NewOrder({cOrderBook}) {
                     break;
                 }
             }
-            // Now offersToTake is a list of offers to take.
-            // Sort offersToTake by index descending - this makes sure the contract will not mutate the order IDs as it removes offers.
+            // Now bidsToTake is a list of bids to take.
+            // Sort bidsToTake by index descending - this makes sure the contract will not mutate the order IDs as it removes offers.
             // Note: this is correct, but not necessary fair to the makers, with respect to the order arrivals.
             bidsToTake.sort((a, b) => {
                 if (a.id < b.id) return 1;
