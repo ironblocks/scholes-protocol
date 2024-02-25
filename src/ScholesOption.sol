@@ -377,12 +377,12 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
     function liquidate(address holder, uint256 id) external {
         require(! isLong(id), "Cannot liquidate long holding");
         require(timeOracle.getTime() <= getExpiration(id), "Expired option");
-        (uint256 requirement, uint256 possession) = collateralRequirement(holder, id, false);
+        (uint256 requirement, uint256 possession) = collateralRequirement(holder, id, /*entry=*/false);
         require(possession < requirement, "Not undercollateralized");
         uint256 baseId = collaterals.getId(id, true);
-        collaterals.mintCollateral(holder, baseId, requirement); // Temporary, to avoid undercollateralization on transfer. Overkill, but who cares! Cheaper on gas to avoid exact calculation
-        _safeTransferFrom(holder, msg.sender, id, balanceOf(holder, id), ""); // Collateralization is enforced by the transfer
-        collaterals.burnCollateral(holder, baseId, requirement); // Reverse above temporary mint.
+        collaterals.mintCollateral(holder, baseId, /*entry*/requirement); // Temporary, to avoid undercollateralization on transfer. Overkill, but who cares! Cheaper on gas to avoid exact calculation
+        // Now holder has enough funds to pay the liquidation penalty and transfer the option (as always the maintenance collateral is enough for this)
+        { // Holder pays the penalty to liquidator optimistically
         // Liquidator does not get the premium built into this short position - it should be built into the liquidation penalty (discuss this)!!!
         uint256 penalty = (requirement - possession) * getLiquidationPenalty(id) / 1 ether; // Expressed in base
         uint256 baseBalance = collaterals.balanceOf(holder, baseId);
@@ -397,6 +397,12 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, msg.sender, underlyingId, penalty>underlyingBalance?underlyingBalance:penalty);
         // no need: if (penalty<=underlyingBalance) return; // paid up
         // no need of further calculations which burn gas
+        }
+        _safeTransferFrom(holder, msg.sender, id, balanceOf(holder, id), ""); // Collateralization is enforced by the transfer
+        collaterals.burnCollateral(holder, baseId, requirement); // Reverse above temporary mint. Reverts if holder balance < previously issued credit optimistically.
+
+        // At this point the liquidator has the penalty and the option.
+
         emit Liquidate(id, holder, msg.sender);
     }
 

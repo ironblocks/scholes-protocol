@@ -161,7 +161,7 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         require(msg.sender == (isBid ? bids[id].owner : offers[id].owner), "Unauthorized");
         removeOrder(isBid, id);
         emit Cancel(isBid, id);
-    } 
+    }
 
     function removeOrder(bool isBid, uint256 id) internal {
         if (isBid) {
