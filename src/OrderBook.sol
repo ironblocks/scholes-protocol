@@ -49,7 +49,7 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         takes(msg.sender, id, amount, price);
     }
 
-    function takes(address taker, uint256 id, int256 amount, uint256 price) public {
+    function takes(address taker, uint256 id, int256 amount, uint256 price) internal {
         require(amount != 0, "No amount");
         require(scholesOptions.timeOracle().getTime() <= scholesOptions.getExpiration(longOptionId), "Expired option");
         if (amount > 0) { // Buying from offer
