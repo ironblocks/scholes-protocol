@@ -96,7 +96,7 @@ contract TradingTest is Test {
         optEthUsd.underlying = WETH;
         optEthUsd.base = USDC;
         optEthUsd.strike = 2000 * 10 ** oracleEthUsd.decimals();
-        optEthUsd.expiration = 1693526400;
+        optEthUsd.expiration = block.timestamp + 30 * 24 * 60 * 60; // 30 days from now
         optEthUsd.isCall = true;
         optEthUsd.isAmerican = false;
         optEthUsd.isLong = true;
@@ -229,5 +229,11 @@ contract TradingTest is Test {
     }
 
     function testBad() public {
+        vm.startPrank(account1, account1);
+        collaterals.deposit(longOptionId, 10000 * 10**USDC.decimals(), 10 ether);
+        uint256 orderId = ob.make(-1 ether, 2 ether, mockTimeOracle.getTime() + 60 * 60 /* 1 hour */);
+        vm.startPrank(account2, account2);
+        collaterals.deposit(longOptionId, 10000 * 10**USDC.decimals(), 10 ether);
+        ob.take(orderId, 1 ether, 2 ether);
     }
 }
