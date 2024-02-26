@@ -11,6 +11,7 @@ import "../src/SpotPriceOracle.sol";
 import "openzeppelin-contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "../src/types/TOptionParams.sol";
 import "../src/types/TCollateralRequirements.sol";
+import "../src/types/TSweepOrderParams.sol";
 import "../src/MockERC20.sol";
 import "../src/MockTimeOracle.sol";
 import "../src/interfaces/ISpotPriceOracle.sol";
@@ -165,7 +166,7 @@ contract TradingTest is Test {
 
         // Now account2 liquidates account1's position
         vm.startPrank(account2, account2);
-        options.liquidate(account1, shortOptionId);
+        options.liquidate(account1, shortOptionId, IOrderBook(address(0)), new TTakerEntry[](0));
     }
 
     function testExerciseAndSettle() public {

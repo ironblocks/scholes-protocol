@@ -49,7 +49,7 @@ interface IScholesOption is IERC1155 {
     function getSettlementPrice(uint256 id) external view returns (uint256);
     function settle(uint256 id) external;
     function estimateLiqudationPenalty(address holder, uint256 id) external view returns (uint256 penalty, uint256 collectable);
-    function liquidate(address holder, uint256 id) external;
+    function liquidate(address holder, uint256 id, IOrderBook ob, TTakerEntry[] memory makers) external;
     function mint(address account, uint256 id, uint256 amount, bytes memory data) external;
     function burn(address from, uint256 id, uint256 amount) external;
 }

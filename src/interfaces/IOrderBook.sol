@@ -15,6 +15,7 @@ interface IOrderBook {
     function make(int256 amount, uint256 price, uint256 expiration) external returns (uint256 id);
     function take(uint256 id, int256 amount, uint256 price) external;
     function sweepAndMake(bool forceFunding, TTakerEntry[] memory makers, TMakerEntry memory toMake) external returns (uint256 id);
+    function vanish(address liquidator, TTakerEntry[] memory makers, int256 amount) external;
     function cancel(bool isBid, uint256 id) external;
     function status(bool isBid, uint256 id) external view returns (int256 amount, uint256 price, uint256 expiration, address owner);
     function numOrders() external view returns (uint256 numBids, uint256 numOffers);

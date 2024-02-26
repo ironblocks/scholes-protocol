@@ -109,6 +109,17 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         }
     }
 
+    // Sell the list of long options up to the amount specified
+    function vanish(address liquidator, TTakerEntry[] memory makers, int256 amount) external {
+        // Take
+        for (uint256 index = 0; index < makers.length; index++) {
+            require(makers[index].amount < 0, "Inconsistent component orders");
+            amount += makers[index].amount;
+            takes(liquidator, makers[index].id, makers[index].amount, makers[index].price);
+        }
+        require(amount >= 0, "Vanish oversold");
+    }
+
     function changePosition(address from, address to, int256 amount, uint256 price) internal {
         // Optimistically pay for the option in collateral - this allows the premium received to be used as collateral
         if (amount > 0) transferCollateral(to, from, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption(uint256(amount), price)); // Pay for long option; all options are 18 decimals
