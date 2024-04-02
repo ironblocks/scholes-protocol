@@ -4,6 +4,9 @@ pragma solidity ^0.8.13;
 import "openzeppelin-contracts/token/ERC1155/IERC1155.sol";
 
 interface IScholesCollateral is IERC1155 {
+    event Deposit(address depositor, uint256 optionId, uint256 baseAmount, uint256 underlyingAmount);
+    event Withdraw(address depositor, uint256 optionId, uint256 baseAmount, uint256 underlyingAmount);
+
     function getId(uint256 optionId, bool isBase) external view returns (uint256);
     function deposit(uint256 optionId, uint256 baseAmount, uint256 underlyingAmount) external;
     function withdraw(uint256 optionId, uint256 baseAmount, uint256 underlyingAmount) external;

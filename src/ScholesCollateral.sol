@@ -87,6 +87,7 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         amounts[0] = baseAmount;
         amounts[1] = underlyingAmount;
         _mintBatch(msg.sender, ids, amounts, "");
+        emit Deposit(msg.sender, optionId, baseAmount, underlyingAmount);
     }
 
     function withdraw(uint256 optionId, uint256 baseAmount, uint256 underlyingAmount) external {
@@ -105,6 +106,7 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         // Now burn and enforce collateralization (in _burnBatch->_afterTokenTransfer)
         _burnBatch(msg.sender, ids, amounts);
         require(options.isCollateralSufficient(msg.sender, optionId, /*entry*/true), "Undercollateralized"); // See analysis in _afterTokenTransfer
+        emit Withdraw(msg.sender, optionId, baseAmount, underlyingAmount);
     }
 
     function balances(address owner, uint256 optionId) public view returns (uint256 baseBalance, uint256 underlyingBalance) {

@@ -32,6 +32,15 @@ contract OrderBookList is IOrderBookList, Ownable {
         (uint256 longId, ) = scholesOptions.createOptionPair(longOptionParams, collateralReqShort);
         IOrderBook ob = new OrderBook(scholesOptions, longId);
         scholesOptions.authorizeExchange(longId, address(ob));
+        emit Create(list.length, address(ob), longId);
         list.push(ob);
+    }
+
+    function removeOrderBook(uint256 index) external {
+        require(index < list.length, "Out of bounds");
+        IOrderBook ob = list[index];
+        emit Remove(index, address(ob), ob.longOptionId());
+        ob.destroy(); // Clear storage
+        list[index] = IOrderBook(address(0)); // Remove from list without rearranging
     }
 }

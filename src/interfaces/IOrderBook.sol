@@ -11,6 +11,7 @@ interface IOrderBook {
     function longOptionId() external view returns (uint256);
     function bids(uint256 id) external view returns (int256 amount, uint256 price, uint256 expiration, address owner);
     function offers(uint256 id) external view returns (int256 amount, uint256 price, uint256 expiration, address owner);
+    function destroy() external;
 
     function make(int256 amount, uint256 price, uint256 expiration) external returns (uint256 id);
     function take(uint256 id, int256 amount, uint256 price) external;

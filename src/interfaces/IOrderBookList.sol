@@ -7,7 +7,11 @@ import "../interfaces/IScholesOption.sol";
 import "../interfaces/IOrderBook.sol";
 
 interface IOrderBookList {
+    event Create(uint256 index, address orderBook, uint256 indexed longOptionId);
+    event Remove(uint256 index, address orderBook, uint256 indexed longOptionId);
+
     function getLength() external view returns (uint256);
     function getOrderBook(uint256 index) external view returns (IOrderBook);
     function createScholesOptionPair(TOptionParams memory optionParams, TCollateralRequirements memory collateralReqShort) external;
+    function removeOrderBook(uint256 index) external;
 }

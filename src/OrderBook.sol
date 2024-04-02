@@ -26,6 +26,15 @@ contract OrderBook is IOrderBook, ERC1155Holder {
 
     TOrderBookItem[] public bids; // bids[bidId]
     TOrderBookItem[] public offers; // offers[offerId]
+
+    // Can be called by anyone permissionlessly to free up storage.
+    // Usually called by OrderBookLise.removeOrderBook.
+    function destroy() external {
+        require(scholesOptions.timeOracle().getTime() > scholesOptions.getExpiration(longOptionId), "Not expired");
+        // selfdestruct(payable(msg.sender)); - deprecated
+        delete bids;
+        delete offers;
+    }
     
     function make(int256 amount, uint256 price, uint256 expiration) public returns (uint256 id) {
         return makes(msg.sender, amount, price, expiration);
