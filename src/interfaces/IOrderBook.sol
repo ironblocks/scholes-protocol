@@ -3,14 +3,14 @@ pragma solidity ^0.8.13;
 import "../types/TSweepOrderParams.sol";
 
 interface IOrderBook {
-    event ChangeId(bool indexed isBid, uint256 indexed oldId, uint256 indexed newId);
-    event Take(uint256 indexed id, address indexed maker, address indexed taker, int256 amount);
-    event Make(uint256 indexed id, address indexed maker, int256 amount, uint256 price, uint256 expiration);
-    event Cancel(bool indexed isBid, uint256 indexed id);
+    event ChangeId(bool indexed isBid, uint256 indexed oldId, uint256 indexed newId, uint256 uniqid);
+    event Take(uint256 indexed id, address indexed maker, address indexed taker, int256 amount, uint256 price, uint256 uniqid);
+    event Make(uint256 indexed id, address indexed maker, int256 amount, uint256 price, uint256 expiration, uint256 indexed uniqid);
+    event Cancel(bool indexed isBid, uint256 indexed id, uint256 uniqid);
 
     function longOptionId() external view returns (uint256);
-    function bids(uint256 id) external view returns (int256 amount, uint256 price, uint256 expiration, address owner);
-    function offers(uint256 id) external view returns (int256 amount, uint256 price, uint256 expiration, address owner);
+    function bids(uint256 id) external view returns (int256 amount, uint256 price, uint256 expiration, address owner, uint256 uniqid);
+    function offers(uint256 id) external view returns (int256 amount, uint256 price, uint256 expiration, address owner, uint256 uniqid);
     function destroy() external;
 
     function make(int256 amount, uint256 price, uint256 expiration) external returns (uint256 id);

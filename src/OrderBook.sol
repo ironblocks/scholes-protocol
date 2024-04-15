@@ -9,6 +9,9 @@ import "openzeppelin-contracts/token/ERC1155/utils/ERC1155Holder.sol";
 contract OrderBook is IOrderBook, ERC1155Holder {
     IScholesOption public scholesOptions;
     uint256 public longOptionId;
+    uint256 public uniqidNonce = 0;
+    
+
 
     constructor (IScholesOption options, uint256 longId) {
         scholesOptions = options;
@@ -20,6 +23,7 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         uint256 price;
         uint256 expiration;
         address owner;
+        uint256 uniqid;
     }
 
     uint256 public constant NIL = type(uint256).max;
@@ -46,12 +50,14 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         require(amount != 0, "No amount");
         if (amount > 0) { // Long
             id = bids.length;
-            bids.push(TOrderBookItem(amount, price, expiration, maker));
+            bids.push(TOrderBookItem(amount, price, expiration, maker, uniqidNonce));
         } else { // Short
             id = offers.length;
-            offers.push(TOrderBookItem(amount, price, expiration, maker));
+            offers.push(TOrderBookItem(amount, price, expiration, maker, uniqidNonce));
         }
-        emit Make(id, maker, amount, price, expiration);
+   
+        emit Make(id, maker, amount, price, expiration, uniqidNonce);
+        uniqidNonce++;
     }
 
     function take(uint256 id, int256 amount, uint256 price) public {
@@ -68,7 +74,7 @@ contract OrderBook is IOrderBook, ERC1155Holder {
             require(- offers[id].amount >= amount, "Insufficient offer");
             offers[id].amount += amount;
             changePosition(offers[id].owner, taker, amount, offers[id].price); // Collateralization enforced within
-            emit Take(id, offers[id].owner, taker, amount);
+            emit Take(id, offers[id].owner, taker, amount, price, offers[id].uniqid);
             if (offers[id].amount == 0) removeOrder(false, id);
         } else { // amount < 0 ; Selling to bid
             require(price == bids[id].price, "Wrong price"); // In case order id changed before call was broadcasted
@@ -77,7 +83,7 @@ contract OrderBook is IOrderBook, ERC1155Holder {
             require(bids[id].amount >= -amount, "Insufficient bid");
             bids[id].amount += amount;
             changePosition(bids[id].owner, taker, amount, bids[id].price); // Collateralization enforced within
-            emit Take(id, bids[id].owner, taker, amount);
+            emit Take(id, bids[id].owner, taker, amount, price, bids[id].uniqid);
             if (bids[id].amount == 0) removeOrder(true, id);
         }
     }
@@ -179,8 +185,9 @@ contract OrderBook is IOrderBook, ERC1155Holder {
 
     function cancel(bool isBid, uint256 id) public {
         require(msg.sender == (isBid ? bids[id].owner : offers[id].owner), "Unauthorized");
+        uint256 uniqid = isBid ? bids[id].uniqid : offers[id].uniqid;
         removeOrder(isBid, id);
-        emit Cancel(isBid, id);
+        emit Cancel(isBid, id, uniqid);
     }
 
     function removeOrder(bool isBid, uint256 id) internal {
@@ -188,14 +195,14 @@ contract OrderBook is IOrderBook, ERC1155Holder {
             // no need: delete bids[id];
             if (bids.length != id+1)  { // Switch with the last
                 bids[id] = bids[bids.length-1];
-                emit ChangeId(isBid, bids.length-1, id);
+                emit ChangeId(isBid, bids.length-1, id, bids[id].uniqid);
             }
             bids.pop();
         } else {
             // no need: delete offers[id];
             if (offers.length != id+1)  { // Switch with the last
                 offers[id] = offers[offers.length-1];
-                emit ChangeId(isBid, offers.length-1, id);
+                emit ChangeId(isBid, offers.length-1, id, offers[id].uniqid);
             }
             offers.pop();
         }
