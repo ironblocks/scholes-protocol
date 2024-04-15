@@ -128,6 +128,7 @@ contract TradingTest is Test {
     }
 
     function testTake() public {
+        oracle.setMockPrice(2000 * 10 ** oracle.decimals());
         vm.startPrank(account1, account1);
         collaterals.deposit(longOptionId, 10000 * 10**USDC.decimals(), 10 ether);
         uint256 orderId = ob.make(-1 ether, 2 ether, mockTimeOracle.getTime() + 60 * 60 /* 1 hour */);
