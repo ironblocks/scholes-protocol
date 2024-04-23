@@ -37,6 +37,10 @@ contract TradingTest is Test {
     ISpotPriceOracle oracle;
     ITimeOracle mockTimeOracle;
 
+    // events
+    event Take(uint256 indexed id, address indexed maker, address indexed taker, int256 amount);
+    event Make(uint256 indexed id, address indexed maker, int256 amount, uint256 price, uint256 expiration);
+
     function setUp() public {
         console.log("Creator (owner): ", msg.sender);
 
@@ -127,14 +131,97 @@ contract TradingTest is Test {
         WETH.approve(address(collaterals), type(uint256).max);
     }
 
-    function testTake() public {
+    /**
+     * Sets expectations for the "Make" event to be emitted with specified attributes.
+     * Used to verify that the correct "Make" event is emitted during contract interaction.
+     */
+    function expectNextCallMakeEvent(uint id, address maker, int256 amount, uint256 price, uint256 expiration) private {
+        vm.expectEmit(true, true, true, true);
+        emit Make(id, maker, amount, price, expiration);
+    }
+
+    /**
+     * Sets expectations for the "Take" event to be emitted with specified attributes.
+     * Used to verify that the correct "Take" event is emitted during contract interaction.
+     */
+    function expectNextCallTakeEvent(uint id, address maker, address taker, int256 amount) private {
+        vm.expectEmit(true, true, true, true);
+        emit Take(id, maker, taker, amount);
+    }
+
+    /**
+     * Asserts the current counts of bids and offers in the OrderBook match the expected values.
+     * This function helps ensure the state of the OrderBook is as expected after operations that
+     * should alter the counts of bids or offers.
+     */
+    function assertOrderCounts(uint256 expectedBids, uint256 expectedOffers) private {
+        (uint256 numBids, uint256 numOffers) = ob.numOrders();
+        assertEq(numBids, expectedBids, "Mismatch in expected number of bids.");
+        assertEq(numOffers, expectedOffers, "Mismatch in expected number of offers.");
+    }
+
+   /**
+    * A helper function to abstract the common logic for testing the "take" functionality.
+    * This function sets up an initial order, executes a take operation, and then verifies
+    * the state of the order book post-operation. It is designed to be reusable for testing
+    * both buying from an offer and selling to a bid by adjusting the sign of the takeAmount.
+    *
+    * @param takeAmount The amount of the asset to take. Positive values simulate buying from
+    * an offer (take order), while negative values simulate selling to a bid.
+    */
+    function _testTakeHelper(int256 takeAmount) private {
+        int256 makeAmount = takeAmount * -1;
+        uint256 expectedOrderId = 0;
+        uint takeMakePrice = 2 ether;
+        uint oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        address maker = account1;
+        address taker = account2;
         oracle.setMockPrice(2000 * 10 ** oracle.decimals());
-        vm.startPrank(account1, account1);
+        // order book should be empty at first
+        assertOrderCounts(0, 0);
+        // prepare and place the make order
+        vm.startPrank(maker, maker);
         collaterals.deposit(longOptionId, 10000 * 10**USDC.decimals(), 10 ether);
-        uint256 orderId = ob.make(-1 ether, 2 ether, mockTimeOracle.getTime() + 60 * 60 /* 1 hour */);
-        vm.startPrank(account2, account2);
+        expectNextCallMakeEvent(expectedOrderId, maker, makeAmount, takeMakePrice, oneHourExpiration);
+        uint256 orderId = ob.make(makeAmount, takeMakePrice, oneHourExpiration);
+        assertEq(orderId, expectedOrderId);
+        // verify the order was placed and appears in the book
+        (int256 offerAmount, uint256 offerPrice, uint256 offerExpiration, address offerOwner) =
+            takeAmount > 0 ? ob.offers(orderId) : ob.bids(orderId);
+        assertEq(offerAmount, makeAmount);
+        assertEq(offerPrice, takeMakePrice);
+        assertEq(offerExpiration, oneHourExpiration);
+        assertEq(offerOwner, maker);
+        // the order book should be updated with the new offer
+        if (takeAmount > 0) assertOrderCounts(0, 1);
+        else assertOrderCounts(1, 0);
+        // prepare and place the take order
+        vm.startPrank(taker, taker);
         collaterals.deposit(longOptionId, 10000 * 10**USDC.decimals(), 10 ether);
-        ob.take(orderId, 1 ether, 2 ether);
+        expectNextCallTakeEvent(expectedOrderId, maker, taker, takeAmount);
+        ob.take(orderId, takeAmount, takeMakePrice);
+        // order book should be empty again
+        assertOrderCounts(0, 0);
+    }
+
+   /**
+    * Test the "take" functionality when buying from an offer.
+    * This test uses the helper function to simulate a scenario where an account
+    * takes an offer by buying from it.
+    */
+    function testTakeBuyingFromOffer() public {
+        int256 takeAmount = 1 ether;
+        _testTakeHelper(takeAmount);
+    }
+
+   /**
+    * Test the "take" functionality when selling to a bid.
+    * This test uses the helper function to simulate a scenario where an account
+    * takes a bid by selling to it.
+    */
+    function testTakeSellingToBid() public {
+        int256 takeAmount = -1 ether;
+        _testTakeHelper(takeAmount);
     }
 
     function testLiquidate() public {
