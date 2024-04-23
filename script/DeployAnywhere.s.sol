@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 import "forge-std/console.sol";
 import "../src/OrderBookList.sol";
 import "../src/ScholesOption.sol";
+import "../src/ScholesLiquidator.sol";
 import "../src/ScholesCollateral.sol";
 import "../src/SpotPriceOracleApprovedList.sol";
 import "../src/SpotPriceOracle.sol";
@@ -86,6 +87,12 @@ contract Deploy is Script {
             address(collaterals)
         );
 
+        IScholesLiquidator liquidator = new ScholesLiquidator(address(options));
+        console.log(
+            "ScholesLiquidator deployed: ",
+            address(liquidator)
+        );
+
         ISpotPriceOracleApprovedList oracleList = new SpotPriceOracleApprovedList();
         console.log(
             "SpotPriceOracleApprovedList deployed: ",
@@ -104,7 +111,9 @@ contract Deploy is Script {
             address(mockTimeOracle)
         );
         
-        options.setFriendContracts(address(collaterals), address(oracleList), address(obList), address(mockTimeOracle));
+        options.setFriendContracts(address(collaterals), address(liquidator), address(oracleList), address(obList), address(mockTimeOracle));
+        collaterals.setFriendContracts();
+        liquidator.setFriendContracts();
 
         // Now let's create some test Tokens, Oracles and Options
 

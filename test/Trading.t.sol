@@ -6,6 +6,7 @@ import "forge-std/console.sol";
 import "../src/OrderBookList.sol";
 import "../src/ScholesOption.sol";
 import "../src/ScholesCollateral.sol";
+import "../src/ScholesLiquidator.sol";
 import "../src/SpotPriceOracleApprovedList.sol";
 import "../src/SpotPriceOracle.sol";
 import "openzeppelin-contracts/token/ERC20/extensions/IERC20Metadata.sol";
@@ -66,6 +67,12 @@ contract TradingTest is Test {
             address(collaterals)
         );
 
+        IScholesLiquidator liquidator = new ScholesLiquidator(address(options));
+        console.log(
+            "ScholesLiquidator deployed: ",
+            address(liquidator)
+        );
+
         ISpotPriceOracleApprovedList oracleList = new SpotPriceOracleApprovedList();
         console.log(
             "SpotPriceOracleApprovedList deployed: ",
@@ -84,7 +91,9 @@ contract TradingTest is Test {
             address(mockTimeOracle)
         );
         
-        options.setFriendContracts(address(collaterals), address(oracleList), address(obList), address(mockTimeOracle));
+        options.setFriendContracts(address(collaterals), address(liquidator), address(oracleList), address(obList), address(mockTimeOracle));
+        collaterals.setFriendContracts();
+        liquidator.setFriendContracts();
 
         ISpotPriceOracle oracleEthUsd = new SpotPriceOracle(AggregatorV3Interface(chainlinkEthUsd), WETH, USDC, false);
         console.log(
@@ -166,7 +175,7 @@ contract TradingTest is Test {
 
         // Now account2 liquidates account1's position
         vm.startPrank(account2, account2);
-        options.liquidate(account1, shortOptionId, IOrderBook(address(0)), new TTakerEntry[](0));
+        options.liquidator().liquidate(account1, shortOptionId, IOrderBook(address(0)), new TTakerEntry[](0));
     }
 
     function testExerciseAndSettle() public {

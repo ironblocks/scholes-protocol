@@ -11,6 +11,7 @@ import "openzeppelin-contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 
 import "./interfaces/IScholesOption.sol";
 import "./interfaces/IScholesCollateral.sol";
+import "./interfaces/IScholesLiquidator.sol";
 import "./interfaces/ISpotPriceOracle.sol";
 import "./interfaces/ISpotPriceOracleApprovedList.sol";
 import "./interfaces/IOrderBookList.sol";
@@ -20,6 +21,7 @@ import "./types/TSweepOrderParams.sol";
 
 contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Supply {
     IScholesCollateral public collaterals;
+    IScholesLiquidator public liquidator;
     ISpotPriceOracleApprovedList public spotPriceOracleApprovedList;
     IOrderBookList public orderBookList;
     ITimeOracle public timeOracle; // Used only for testing - see ITimeOracle.sol and MockTimeOracle.sol
@@ -106,8 +108,9 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         collateralRequirements[shortId].liquidationPenalty = collateralReqShort.liquidationPenalty;
     }
 
-    function setFriendContracts(address _collaterals, address _spotPriceOracleApprovedList, address _orderBookList, address _timeOracle) external onlyOwner {
+    function setFriendContracts(address _collaterals, address _liquidator, address _spotPriceOracleApprovedList, address _orderBookList, address _timeOracle) external onlyOwner {
         collaterals = IScholesCollateral(_collaterals);
+        liquidator = IScholesLiquidator(_liquidator);
         spotPriceOracleApprovedList = ISpotPriceOracleApprovedList(_spotPriceOracleApprovedList);
         orderBookList = IOrderBookList(_orderBookList);
         timeOracle = ITimeOracle(_timeOracle);
@@ -174,7 +177,7 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         return possession >= requirement;
     }
 
-    function collateralRequirement(address holder, uint256 id, bool entry) internal view returns (uint256 requirement, uint256 possession) {
+    function collateralRequirement(address holder, uint256 id, bool entry) public view returns (uint256 requirement, uint256 possession) {
         if (address(0) == holder) return (0, 0);
         ISpotPriceOracle oracle = spotPriceOracle(id);
         // Convert all collateral into base currency (token)
@@ -367,51 +370,9 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         }
     }
 
-    function estimateLiqudationPenalty(address holder, uint256 id) external view returns (uint256 penalty, uint256 collectable) {
-        require(timeOracle.getTime() <= getExpiration(id), "Expired option");
-        (uint256 requirement, uint256 possession) = collateralRequirement(holder, id, false);
-        if (possession >= requirement) return(0, 0);
-        penalty = (requirement - possession) * getLiquidationPenalty(id) / 1 ether; // Expressed in base
-        collectable = possession > penalty ? penalty : possession;
-    }
-
-    function liquidate(address holder, uint256 id, IOrderBook ob, TTakerEntry[] memory makers) external {
-        require(! isLong(id), "Cannot liquidate long holding");
-        require(timeOracle.getTime() <= getExpiration(id), "Expired option");
-        (uint256 requirement, uint256 possession) = collateralRequirement(holder, id, /*entry=*/false);
-        require(possession < requirement, "Not undercollateralized");
-        uint256 baseId = collaterals.getId(id, true);
-        collaterals.mintCollateral(holder, baseId, /*maintenance*/requirement); // Temporary, to avoid undercollateralization on transfer. Overkill, but who cares! Cheaper on gas to avoid exact calculation
-        collaterals.mintCollateral(msg.sender, baseId, /*maintenance*/requirement); // Temporary collateralize the liquidator, so that he can take over the short option position before buying it back on the market (vanishing) 
-        // Now holder has enough funds to pay the liquidation penalty and transfer the option (as always the maintenance collateral is enough for this)
-        { // Holder pays the penalty to liquidator optimistically
-        // Liquidator does not get the premium built into this short position - it should be built into the liquidation penalty (discuss this)!!!
-        uint256 penalty = (requirement - possession) * getLiquidationPenalty(id) / 1 ether; // Expressed in base
-        uint256 baseBalance = collaterals.balanceOf(holder, baseId);
-        collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, msg.sender, baseId, penalty>baseBalance?baseBalance:penalty);
-        if (penalty<=baseBalance) return; // paid up
-        penalty -= baseBalance;
-        // convert penalty to Underlying
-        ISpotPriceOracle oracle = spotPriceOracle(id);
-        penalty = oracle.toSpot(penalty);
-        uint256 underlyingId = collaterals.getId(id, false);
-        uint256 underlyingBalance = collaterals.balanceOf(holder, underlyingId);
-        collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, msg.sender, underlyingId, penalty>underlyingBalance?underlyingBalance:penalty);
-        // no need: if (penalty<=underlyingBalance) return; // paid up
-        // no need of further calculations which burn gas
-        }
-        uint256 amount = balanceOf(holder, id);
-        _safeTransferFrom(holder, msg.sender, id, amount, ""); // Collateralization is enforced by the transfer
-        collaterals.burnCollateral(holder, baseId, requirement); // Reverse above temporary mint. Reverts if holder balance < previously issued credit optimistically.
-
-        // At this point the liquidator has the penalty and the option.
-        if (makers.length > 0) {
-            require(ob.longOptionId() == getOpposite(id), "Wrong order book");
-            ob.vanish(msg.sender, makers, int256(amount));
-        }
-
-        collaterals.burnCollateral(msg.sender, baseId, requirement); // Reverse above temporary mint. Reverts if liquidator balance < previously issued credit optimistically.
-        emit Liquidate(id, holder, msg.sender);
+    function proxySafeTransferFrom(address from, address to, uint256 id, uint256 amount) external {
+        require(msg.sender == address(liquidator), "Unauthorized");
+        _safeTransferFrom(from, to, id, amount, "");
     }
 
     function pause() public onlyOwner {

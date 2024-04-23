@@ -33,7 +33,7 @@ find "$OUT_DIR" -name '*.json' | while read -r json_file; do
         # Calculate the size of the bytecode
         size=$((${#bytecode} / 2 - 1)) # Divide by 2 to convert hex digits to bytes and remove the leading '0x'
         if [ "$size" -gt 24576 ]; then
-            echo "$contract_name: Bytecode size is $size bytes (WARNING: exceeds 24KB - EIP-170 violation!)"
+            echo "$contract_name: Bytecode size is $size bytes (WARNING: exceeds 24576 bytes (24KB) - EIP-170 violation!)"
         elif [ "$VERBOSE" = true ]; then
             echo "$contract_name: Bytecode size is $size bytes"
         fi
