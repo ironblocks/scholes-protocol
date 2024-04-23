@@ -18,6 +18,7 @@ import "./interfaces/IOrderBookList.sol";
 import "./interfaces/IOrderBook.sol";
 import "./interfaces/ITimeOracle.sol";
 import "./types/TSweepOrderParams.sol";
+import "./StSCH.sol";
 
 contract ScholesLiquidator is IScholesLiquidator {
     IScholesOption options;
@@ -25,13 +26,17 @@ contract ScholesLiquidator is IScholesLiquidator {
     ISpotPriceOracleApprovedList spotPriceOracleApprovedList;
     ITimeOracle timeOracle;
     IERC20 schToken;
+    StSCH stSCH;
 
     uint256 public constant MAX_INSURANCE_PAYOUT_PERC = 10;
     uint256 public constant MAX_BACKSTOP_PAYOUT_PERC = 10;
 
+    uint256 public constant DUST = 1_000_000_000;
+
     constructor (address _options, IERC20 _schToken) {
         options = IScholesOption(_options);
         schToken = _schToken;
+        stSCH = new StSCH("Staked SCH", "stSCH");
     }
 
     function setFriendContracts() external {
@@ -132,5 +137,25 @@ contract ScholesLiquidator is IScholesLiquidator {
     function schToBase(uint256 optionId, uint256 amount) internal view returns (uint256) {
         //!!! Here convert amount to base !!!
         return amount;
+    }
+
+    function stake(uint256 amount) external {
+        require(amount > DUST, "Dust stake");
+        uint256 stSchAmount = amount;
+        uint256 bal = schToken.balanceOf(address(this));
+        if (bal > DUST) {
+            stSchAmount *= stSCH.totalSupply();
+            stSchAmount /= bal;
+        }
+        schToken.transferFrom(msg.sender, address(this), amount);
+        stSCH.mint(msg.sender, stSchAmount);
+    }
+
+    function unstake(uint256 amount) external {
+        require(amount > DUST, "Dust unstake");
+        if (stSCH.totalSupply() < DUST) return;
+        uint256 schAmount = (schToken.balanceOf(address(this)) * amount) / stSCH.totalSupply();
+        stSCH.burn(msg.sender, amount);
+        schToken.transfer(msg.sender, schAmount);
     }
 }

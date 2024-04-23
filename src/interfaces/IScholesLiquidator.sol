@@ -20,4 +20,6 @@ interface IScholesLiquidator {
     function estimateLiqudationPenalty(address holder, uint256 id) external view returns (uint256 penalty, uint256 collectable);
     function liquidate(address holder, uint256 id, IOrderBook ob, TTakerEntry[] memory makers) external;
     function liquidate(address holder, uint256 id, IOrderBook ob, TTakerEntry[] memory makers, uint256 maxSacrifice) external;
+    function stake(uint256 amount) external;
+    function unstake(uint256 amount) external;
 }
