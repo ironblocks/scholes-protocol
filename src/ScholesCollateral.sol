@@ -30,8 +30,8 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         liquidator = IScholesLiquidator(options.liquidator());
     }
 
-    modifier onlyExchangeOrOptions(uint256 id) {
-        require(msg.sender == address(options) || options.isAuthorizedExchange(id, msg.sender), "Unauthorized");
+    modifier onlyExchangeLiquidatorOrOptions(uint256 id) {
+        require(msg.sender == address(options) || options.isAuthorizedExchange(id, msg.sender) || msg.sender == address(liquidator), "Unauthorized");
         _;
     }
 
@@ -127,7 +127,7 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         underlyingBalance = bal[1];
     }
 
-    function proxySafeTransferFrom(uint256 optionId, address from, address to, uint256 id, uint256 amount) external onlyExchangeOrOptions(optionId) {
+    function proxySafeTransferFrom(uint256 optionId, address from, address to, uint256 id, uint256 amount) external onlyExchangeLiquidatorOrOptions(optionId) {
         _safeTransferFrom(from, to, id, amount, "");
     }
 
