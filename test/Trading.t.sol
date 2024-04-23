@@ -55,6 +55,10 @@ contract TradingTest is Test {
         WETH.transfer(account2, 100 * 10**WETH.decimals());
         WETH.transfer(account3, 100 * 10**WETH.decimals());
 
+        // SCH token
+        IERC20Metadata SCH = IERC20Metadata(address(new MockERC20("SCH", "SCH", 18, 10**6 * 10**18))); // 1M total supply
+        console.log("SCH token address: ", address(SCH));
+
         options = new ScholesOption();
         console.log(
             "ScholesOption deployed: ",
@@ -67,11 +71,12 @@ contract TradingTest is Test {
             address(collaterals)
         );
 
-        IScholesLiquidator liquidator = new ScholesLiquidator(address(options));
+        IScholesLiquidator liquidator = new ScholesLiquidator(address(options), SCH);
         console.log(
             "ScholesLiquidator deployed: ",
             address(liquidator)
         );
+        SCH.transfer(address(liquidator), 100000 * 10**SCH.decimals()); // Fund the backstop stake with 100000 SCH - move this into the tests
 
         ISpotPriceOracleApprovedList oracleList = new SpotPriceOracleApprovedList();
         console.log(

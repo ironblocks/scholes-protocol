@@ -75,6 +75,10 @@ contract Deploy is Script {
 
         console.log("Creator (owner): ", msg.sender);
 
+        // SCH token
+        IERC20Metadata SCH = IERC20Metadata(address(new MockERC20("SCH", "SCH", 18, 10**6 * 10**18))); // 1M total supply
+        console.log("SCH token address: ", address(SCH));
+
         IScholesOption options = new ScholesOption();
         console.log(
             "ScholesOption deployed: ",
@@ -87,7 +91,7 @@ contract Deploy is Script {
             address(collaterals)
         );
 
-        IScholesLiquidator liquidator = new ScholesLiquidator(address(options));
+        IScholesLiquidator liquidator = new ScholesLiquidator(address(options), SCH);
         console.log(
             "ScholesLiquidator deployed: ",
             address(liquidator)
