@@ -6,6 +6,7 @@ import "forge-std/console.sol";
 import "../src/OrderBookList.sol";
 import "../src/ScholesOption.sol";
 import "../src/ScholesCollateral.sol";
+import "../src/ScholesLiquidator.sol";
 import "../src/SpotPriceOracleApprovedList.sol";
 import "../src/SpotPriceOracle.sol";
 import "openzeppelin-contracts/token/ERC20/extensions/IERC20Metadata.sol";
@@ -58,6 +59,10 @@ contract TradingTest is Test {
         WETH.transfer(account2, 100 * 10**WETH.decimals());
         WETH.transfer(account3, 100 * 10**WETH.decimals());
 
+        // SCH token
+        IERC20Metadata SCH = IERC20Metadata(address(new MockERC20("SCH", "SCH", 18, 10**6 * 10**18))); // 1M total supply
+        console.log("SCH token address: ", address(SCH));
+
         options = new ScholesOption();
         console.log(
             "ScholesOption deployed: ",
@@ -69,6 +74,13 @@ contract TradingTest is Test {
             "ScholesCollateral deployed: ",
             address(collaterals)
         );
+
+        IScholesLiquidator liquidator = new ScholesLiquidator(address(options));
+        console.log(
+            "ScholesLiquidator deployed: ",
+            address(liquidator)
+        );
+        SCH.transfer(address(liquidator), 100000 * 10**SCH.decimals()); // Fund the backstop stake with 100000 SCH - move this into the tests
 
         ISpotPriceOracleApprovedList oracleList = new SpotPriceOracleApprovedList();
         console.log(
@@ -88,8 +100,20 @@ contract TradingTest is Test {
             address(mockTimeOracle)
         );
         
-        options.setFriendContracts(address(collaterals), address(oracleList), address(obList), address(mockTimeOracle));
+        options.setFriendContracts(address(collaterals), address(liquidator), address(oracleList), address(obList), address(mockTimeOracle), address(SCH));
+        collaterals.setFriendContracts();
+        liquidator.setFriendContracts();
+        // In order for the liquidation backstop to work, the liquidator must be funded with SCH, by staking using liquidator.stSCH().stake()
 
+        // Mock SCH/USDC oracle
+        ISpotPriceOracle oracleSchUsd = new SpotPriceOracle(AggregatorV3Interface(chainlinkEthUsd/*Irrelevant-always mock*/), SCH, USDC, false);
+        oracleSchUsd.setMockPrice(1 * 10 ** oracleSchUsd.decimals()); // 1 SCH = 1 USDC
+        console.log(
+            "SCH/USDC SpotPriceOracle based on ETH/USD deployed, but always mocked: ",
+            address(oracleSchUsd)
+        );
+        oracleList.addOracle(oracleSchUsd);
+        
         ISpotPriceOracle oracleEthUsd = new SpotPriceOracle(AggregatorV3Interface(chainlinkEthUsd), WETH, USDC, false);
         console.log(
             "WETH/USDC SpotPriceOracle based on ETH/USD deployed: ",
@@ -254,7 +278,7 @@ contract TradingTest is Test {
 
         // Now account2 liquidates account1's position
         vm.startPrank(account2, account2);
-        options.liquidate(account1, shortOptionId, IOrderBook(address(0)), new TTakerEntry[](0));
+        options.liquidator().liquidate(account1, shortOptionId, IOrderBook(address(0)), new TTakerEntry[](0));
     }
 
     function testExerciseAndSettle() public {
@@ -318,11 +342,5 @@ contract TradingTest is Test {
     }
 
     function testBad() public {
-        vm.startPrank(account1, account1);
-        collaterals.deposit(longOptionId, 10000 * 10**USDC.decimals(), 10 ether);
-        uint256 orderId = ob.make(-1 ether, 2 ether, mockTimeOracle.getTime() + 60 * 60 /* 1 hour */);
-        vm.startPrank(account2, account2);
-        collaterals.deposit(longOptionId, 10000 * 10**USDC.decimals(), 10 ether);
-        ob.take(orderId, 1 ether, 2 ether);
     }
 }

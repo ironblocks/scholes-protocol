@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 import "forge-std/console.sol";
 import "../src/OrderBookList.sol";
 import "../src/ScholesOption.sol";
+import "../src/ScholesLiquidator.sol";
 import "../src/ScholesCollateral.sol";
 import "../src/SpotPriceOracleApprovedList.sol";
 import "../src/SpotPriceOracle.sol";
@@ -74,6 +75,10 @@ contract Deploy is Script {
 
         console.log("Creator (owner): ", msg.sender);
 
+        // SCH token
+        IERC20Metadata SCH = IERC20Metadata(address(new MockERC20("SCH", "SCH", 18, 10**6 * 10**18))); // 1M total supply
+        console.log("SCH token address: ", address(SCH));
+
         IScholesOption options = new ScholesOption();
         console.log(
             "ScholesOption deployed: ",
@@ -84,6 +89,12 @@ contract Deploy is Script {
         console.log(
             "ScholesCollateral deployed: ",
             address(collaterals)
+        );
+
+        IScholesLiquidator liquidator = new ScholesLiquidator(address(options));
+        console.log(
+            "ScholesLiquidator deployed: ",
+            address(liquidator)
         );
 
         ISpotPriceOracleApprovedList oracleList = new SpotPriceOracleApprovedList();
@@ -104,7 +115,10 @@ contract Deploy is Script {
             address(mockTimeOracle)
         );
         
-        options.setFriendContracts(address(collaterals), address(oracleList), address(obList), address(mockTimeOracle));
+        options.setFriendContracts(address(collaterals), address(liquidator), address(oracleList), address(obList), address(mockTimeOracle), address(SCH));
+        collaterals.setFriendContracts();
+        liquidator.setFriendContracts();
+        // In order for the liquidation backstop to work, the liquidator must be funded with SCH, by staking using liquidator.stSCH().stake()
 
         // Now let's create some test Tokens, Oracles and Options
 
@@ -131,6 +145,17 @@ contract Deploy is Script {
         WBTC.transfer(account2, 100 * 10**WBTC.decimals());
         WBTC.transfer(account3, 100 * 10**WBTC.decimals());
 
+        // Mock SCH/USDC oracle
+        { // To avoid "stack too deep" error
+        ISpotPriceOracle oracleSchUsd = new SpotPriceOracle(AggregatorV3Interface(chainlinkEthUsd/*Irrelevant-always mock*/), SCH, USDC, false);
+        oracleSchUsd.setMockPrice(1 * 10 ** oracleSchUsd.decimals()); // 1 SCH = 1 USDC
+        console.log(
+            "SCH/USDC SpotPriceOracle based on ETH/USD deployed, but always mocked: ",
+            address(oracleSchUsd)
+        );
+        oracleList.addOracle(oracleSchUsd);
+        }
+        
         // Test Oracles:
 
         ISpotPriceOracle oracleEthUsd = new SpotPriceOracle(AggregatorV3Interface(chainlinkEthUsd), WETH, USDC, false);

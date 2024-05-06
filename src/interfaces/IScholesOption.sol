@@ -8,6 +8,7 @@ import "../types/TOptionParams.sol";
 import "../types/TCollateralRequirements.sol";
 
 import "./IScholesCollateral.sol";
+import "./IScholesLiquidator.sol";
 import "./ISpotPriceOracle.sol";
 import "./ISpotPriceOracleApprovedList.sol";
 import "./IOrderBookList.sol";
@@ -17,15 +18,17 @@ interface IScholesOption is IERC1155 {
     event SettlementPrice(uint256 indexed id, uint256 settlementPrice);
     event Exercise(uint256 indexed id, address indexed holder, uint256 amount, uint256 timestamp, bool toUnderlying);
     event Settle(uint256 indexed id, address indexed holder, uint256 amount, uint256 timestamp, bool spotNotSettlement);
-    event Liquidate(uint256 indexed id, address indexed holder, address indexed liquidator);
 
-    function setFriendContracts(address _collaterals, address _spotPriceOracleApprovedList, address _orderBookList, address _timeOracle) external;
+    function setFriendContracts(address _collaterals, address _liquidator, address _spotPriceOracleApprovedList, address _orderBookList, address _timeOracle, address _schToken) external;
     function authorizeExchange(uint256 id, address ob) external;
     function isAuthorizedExchange(uint256 id, address exchange) external view returns (bool);
     function collaterals() external view returns (IScholesCollateral);
+    function liquidator() external view returns (IScholesLiquidator);
     function spotPriceOracleApprovedList() external view returns (ISpotPriceOracleApprovedList);
     function orderBookList() external view returns (IOrderBookList);
     function spotPriceOracle(uint256 id) external view returns (ISpotPriceOracle);
+    function schToken() external view returns (IERC20Metadata);
+    function schTokenSpotOracle(uint256 id) external view returns (ISpotPriceOracle);
     function timeOracle() external view returns (ITimeOracle);
     function numHolders(uint256 id) external view returns (uint256);
     function getHolder(uint256 id, uint256 index) external view returns (address);
@@ -39,6 +42,7 @@ interface IScholesOption is IERC1155 {
     function getBaseToken(uint256 id) external view returns (IERC20Metadata);
     function getUnderlyingToken(uint256 id) external view returns (IERC20Metadata);
     function getCollateralRequirementThreshold(uint256 id, bool entry) external view returns (uint256);
+    function collateralRequirement(address holder, uint256 id, bool entry) external view returns (uint256 requirement, uint256 possession);
     function collateralRequirement(uint256 amount, uint256 id, bool entry) external view returns (uint256);
     function isCollateralSufficient(address holder, uint256 id, bool entry) external view returns (bool);
     function getLiquidationPenalty(uint256 id) external view returns (uint256);
@@ -48,8 +52,7 @@ interface IScholesOption is IERC1155 {
     function setSettlementPrice(uint256 id) external;
     function getSettlementPrice(uint256 id) external view returns (uint256);
     function settle(uint256 id) external;
-    function estimateLiqudationPenalty(address holder, uint256 id) external view returns (uint256 penalty, uint256 collectable);
-    function liquidate(address holder, uint256 id, IOrderBook ob, TTakerEntry[] memory makers) external;
     function mint(address account, uint256 id, uint256 amount, bytes memory data) external;
     function burn(address from, uint256 id, uint256 amount) external;
+    function proxySafeTransferFrom(address from, address to, uint256 id, uint256 amount) external;
 }

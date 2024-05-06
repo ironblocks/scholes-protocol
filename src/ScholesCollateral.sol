@@ -10,9 +10,11 @@ import "openzeppelin-contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 
 import "./interfaces/IScholesOption.sol";
 import "./interfaces/IScholesCollateral.sol";
+import "./interfaces/IScholesLiquidator.sol";
 
 contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ERC1155Supply {
     IScholesOption options;
+    IScholesLiquidator liquidator;
 
     struct TCollateralPurpose {
         uint256 optionId;
@@ -24,13 +26,17 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         options = IScholesOption(_options);
     }
 
-    modifier onlyExchangeOrOptions(uint256 id) {
-        require(msg.sender == address(options) || options.isAuthorizedExchange(id, msg.sender), "Unauthorized");
+    function setFriendContracts() external {
+        liquidator = IScholesLiquidator(options.liquidator());
+    }
+
+    modifier onlyExchangeLiquidatorOrOptions(uint256 id) {
+        require(msg.sender == address(options) || options.isAuthorizedExchange(id, msg.sender) || msg.sender == address(liquidator), "Unauthorized");
         _;
     }
 
-    modifier onlyOptions() {
-        require(msg.sender == address(options), "Unauthorized");
+    modifier onlyOptionsOrLiquidator() {
+        require(msg.sender == address(options) || msg.sender == address(liquidator), "Unauthorized");
         _;
     }
 
@@ -51,11 +57,11 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         return super.totalSupply(id);
     }
 
-    function mintCollateral(address to, uint256 id, uint256 amount) external onlyOptions {
+    function mintCollateral(address to, uint256 id, uint256 amount) external onlyOptionsOrLiquidator {
         _mint(to, id, amount, "");
     }
 
-    function burnCollateral(address from, uint256 id, uint256 amount) external onlyOptions {
+    function burnCollateral(address from, uint256 id, uint256 amount) external onlyOptionsOrLiquidator {
         _burn(from, id, amount);
     }
 
@@ -121,7 +127,7 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         underlyingBalance = bal[1];
     }
 
-    function proxySafeTransferFrom(uint256 optionId, address from, address to, uint256 id, uint256 amount) external onlyExchangeOrOptions(optionId) {
+    function proxySafeTransferFrom(uint256 optionId, address from, address to, uint256 id, uint256 amount) external onlyExchangeLiquidatorOrOptions(optionId) {
         _safeTransferFrom(from, to, id, amount, "");
     }
 
