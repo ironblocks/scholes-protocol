@@ -19,7 +19,7 @@ interface IScholesOption is IERC1155 {
     event Exercise(uint256 indexed id, address indexed holder, uint256 amount, uint256 timestamp, bool toUnderlying);
     event Settle(uint256 indexed id, address indexed holder, uint256 amount, uint256 timestamp, bool spotNotSettlement);
 
-    function setFriendContracts(address _collaterals, address _liquidator, address _spotPriceOracleApprovedList, address _orderBookList, address _timeOracle) external;
+    function setFriendContracts(address _collaterals, address _liquidator, address _spotPriceOracleApprovedList, address _orderBookList, address _timeOracle, address _schToken) external;
     function authorizeExchange(uint256 id, address ob) external;
     function isAuthorizedExchange(uint256 id, address exchange) external view returns (bool);
     function collaterals() external view returns (IScholesCollateral);
@@ -27,6 +27,8 @@ interface IScholesOption is IERC1155 {
     function spotPriceOracleApprovedList() external view returns (ISpotPriceOracleApprovedList);
     function orderBookList() external view returns (IOrderBookList);
     function spotPriceOracle(uint256 id) external view returns (ISpotPriceOracle);
+    function schToken() external view returns (IERC20Metadata);
+    function schTokenSpotOracle(uint256 id) external view returns (ISpotPriceOracle);
     function timeOracle() external view returns (ITimeOracle);
     function numHolders(uint256 id) external view returns (uint256);
     function getHolder(uint256 id, uint256 index) external view returns (address);

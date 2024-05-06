@@ -91,7 +91,7 @@ contract Deploy is Script {
             address(collaterals)
         );
 
-        IScholesLiquidator liquidator = new ScholesLiquidator(address(options), SCH);
+        IScholesLiquidator liquidator = new ScholesLiquidator(address(options));
         console.log(
             "ScholesLiquidator deployed: ",
             address(liquidator)
@@ -115,9 +115,10 @@ contract Deploy is Script {
             address(mockTimeOracle)
         );
         
-        options.setFriendContracts(address(collaterals), address(liquidator), address(oracleList), address(obList), address(mockTimeOracle));
+        options.setFriendContracts(address(collaterals), address(liquidator), address(oracleList), address(obList), address(mockTimeOracle), address(SCH));
         collaterals.setFriendContracts();
         liquidator.setFriendContracts();
+        // In order for the liquidation backstop to work, the liquidator must be funded with SCH, by staking using liquidator.stSCH().stake()
 
         // Now let's create some test Tokens, Oracles and Options
 
@@ -144,6 +145,17 @@ contract Deploy is Script {
         WBTC.transfer(account2, 100 * 10**WBTC.decimals());
         WBTC.transfer(account3, 100 * 10**WBTC.decimals());
 
+        // Mock SCH/USDC oracle
+        { // To avoid "stack too deep" error
+        ISpotPriceOracle oracleSchUsd = new SpotPriceOracle(AggregatorV3Interface(chainlinkEthUsd/*Irrelevant-always mock*/), SCH, USDC, false);
+        oracleSchUsd.setMockPrice(1 * 10 ** oracleSchUsd.decimals()); // 1 SCH = 1 USDC
+        console.log(
+            "SCH/USDC SpotPriceOracle based on ETH/USD deployed, but always mocked: ",
+            address(oracleSchUsd)
+        );
+        oracleList.addOracle(oracleSchUsd);
+        }
+        
         // Test Oracles:
 
         ISpotPriceOracle oracleEthUsd = new SpotPriceOracle(AggregatorV3Interface(chainlinkEthUsd), WETH, USDC, false);

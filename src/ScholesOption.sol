@@ -25,6 +25,7 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
     ISpotPriceOracleApprovedList public spotPriceOracleApprovedList;
     IOrderBookList public orderBookList;
     ITimeOracle public timeOracle; // Used only for testing - see ITimeOracle.sol and MockTimeOracle.sol
+    IERC20Metadata public schToken;
     
     mapping (uint256 => TOptionParams) public options; // id => OptionParams
     mapping (uint256 => TCollateralRequirements) public collateralRequirements; // id => CollateralRequirements
@@ -95,6 +96,7 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         options[longId].isAmerican = longOptionParams.isAmerican;
         options[longId].isLong = true;
         require(address(spotPriceOracle(longId)) != address(0), "No spot price oracle");
+        require(address(schTokenSpotOracle(longId)) != address(0), "No SCH spot price oracle");
 
         options[shortId].underlying = longOptionParams.underlying;
         options[shortId].base = longOptionParams.base;
@@ -108,12 +110,13 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         collateralRequirements[shortId].liquidationPenalty = collateralReqShort.liquidationPenalty;
     }
 
-    function setFriendContracts(address _collaterals, address _liquidator, address _spotPriceOracleApprovedList, address _orderBookList, address _timeOracle) external onlyOwner {
+    function setFriendContracts(address _collaterals, address _liquidator, address _spotPriceOracleApprovedList, address _orderBookList, address _timeOracle, address _schToken) external onlyOwner {
         collaterals = IScholesCollateral(_collaterals);
         liquidator = IScholesLiquidator(_liquidator);
         spotPriceOracleApprovedList = ISpotPriceOracleApprovedList(_spotPriceOracleApprovedList);
         orderBookList = IOrderBookList(_orderBookList);
         timeOracle = ITimeOracle(_timeOracle);
+        schToken = IERC20Metadata(_schToken);
     }
 
     function authorizeExchange(uint256 id, address ob) external {
@@ -161,6 +164,10 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
 
     function spotPriceOracle(uint256 id) public view returns (ISpotPriceOracle) {
         return spotPriceOracleApprovedList.getOracle(getUnderlyingToken(id),  getBaseToken(id));
+    }
+
+    function schTokenSpotOracle(uint256 id) public view returns (ISpotPriceOracle) {
+        return spotPriceOracleApprovedList.getOracle(schToken, getBaseToken(id));
     }
 
     function getCollateralRequirementThreshold(uint256 id, bool entry) public view returns (uint256) {

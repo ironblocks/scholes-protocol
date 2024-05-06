@@ -25,7 +25,7 @@ contract ScholesLiquidator is IScholesLiquidator {
     IScholesCollateral collaterals;
     ISpotPriceOracleApprovedList spotPriceOracleApprovedList;
     ITimeOracle timeOracle;
-    IERC20 schToken;
+    IERC20Metadata schToken;
     StSCH stSCH;
 
     uint256 public constant MAX_INSURANCE_PAYOUT_PERC = 10;
@@ -33,16 +33,16 @@ contract ScholesLiquidator is IScholesLiquidator {
 
     uint256 public constant DUST = 1_000_000_000;
 
-    constructor (address _options, IERC20 _schToken) {
+    constructor (address _options) {
         options = IScholesOption(_options);
-        schToken = _schToken;
-        stSCH = new StSCH("Staked SCH", "stSCH");
     }
 
     function setFriendContracts() external {
         collaterals = options.collaterals();
         spotPriceOracleApprovedList = options.spotPriceOracleApprovedList();
         timeOracle = options.timeOracle();
+        schToken = options.schToken();
+        stSCH = new StSCH("Staked SCH", "stSCH");
     }
 
     function estimateLiqudationPenalty(address holder, uint256 id) external view returns (uint256 penalty, uint256 collectable) {
@@ -130,13 +130,13 @@ contract ScholesLiquidator is IScholesLiquidator {
     }
 
     function baseToSCH(uint256 optionId, uint256 amount) internal view returns (uint256) {
-        //!!! Here convert amount to SCH !!!
-        return amount;
+        ISpotPriceOracle oracleSchBase = spotPriceOracleApprovedList.getOracle(schToken, options.getBaseToken(optionId));
+        return oracleSchBase.toSpot(amount);
     }
 
     function schToBase(uint256 optionId, uint256 amount) internal view returns (uint256) {
-        //!!! Here convert amount to base !!!
-        return amount;
+        ISpotPriceOracle oracleSchBase = spotPriceOracleApprovedList.getOracle(schToken, options.getBaseToken(optionId));
+        return oracleSchBase.toBase(amount);
     }
 
     function stake(uint256 amount) external {
