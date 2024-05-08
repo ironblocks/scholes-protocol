@@ -86,7 +86,6 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         require(longOptionParams.expiration >= timeOracle.getTime(), "Expired option");
         require(collateralReqShort.entryCollateralRequirement != 0, "No strentry collateral requirementike");
         require(collateralReqShort.maintenanceCollateralRequirement != 0, "No maintenance collateral requirement");
-        require(collateralReqShort.liquidationPenalty != 0, "No liquidation penalty");
 
         options[longId].underlying = longOptionParams.underlying;
         options[longId].base = longOptionParams.base;
@@ -107,7 +106,6 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         options[shortId].isLong = false;
         collateralRequirements[shortId].entryCollateralRequirement = collateralReqShort.entryCollateralRequirement;
         collateralRequirements[shortId].maintenanceCollateralRequirement = collateralReqShort.maintenanceCollateralRequirement;
-        collateralRequirements[shortId].liquidationPenalty = collateralReqShort.liquidationPenalty;
     }
 
     function setFriendContracts(address _collaterals, address _liquidator, address _spotPriceOracleApprovedList, address _orderBookList, address _timeOracle, address _schToken) external onlyOwner {
@@ -174,10 +172,6 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         return entry ? collateralRequirements[id].entryCollateralRequirement : collateralRequirements[id].maintenanceCollateralRequirement;
     }
 
-    function getLiquidationPenalty(uint256 id) public view returns (uint256) {
-        return collateralRequirements[id].liquidationPenalty;
-    }
-
     function isCollateralSufficient(address holder, uint256 id, bool entry) public view returns (bool) {
         require(0 != id, "No id");
         (uint256 requirement, uint256 possession) = collateralRequirement(holder, id, entry);
@@ -192,6 +186,9 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         possession = baseBalance + oracle.toBase(underlyingBalance);
         requirement = collateralRequirement(balanceOf(holder, id), id, entry);
     }
+
+    // !!! New function here - enters the collateralization requirements per unit of option
+    // Params: entry threshold, maintenence threshold, id, timestamp, proof (ECDSA)
 
     function collateralRequirement(uint256 amount, uint256 id, bool entry) public view returns (uint256 requirement) {
         ISpotPriceOracle oracle = spotPriceOracle(id);

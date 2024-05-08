@@ -45,7 +45,6 @@ interface IScholesOption is IERC1155 {
     function collateralRequirement(address holder, uint256 id, bool entry) external view returns (uint256 requirement, uint256 possession);
     function collateralRequirement(uint256 amount, uint256 id, bool entry) external view returns (uint256);
     function isCollateralSufficient(address holder, uint256 id, bool entry) external view returns (bool);
-    function getLiquidationPenalty(uint256 id) external view returns (uint256);
     function createOptionPair(TOptionParams memory optionParams, TCollateralRequirements memory collateralReqShort) external returns (uint256 longId, uint256 shortId);
     function calculateOptionId(IERC20Metadata underlying, IERC20Metadata base, uint256 strike, uint256 expiration, bool isCall, bool isAmerican, bool isLong) external pure returns (uint256);
     function exercise(uint256 id, uint256 amount, bool toUnderlying, address[] memory holders, uint256[] memory amounts) external;

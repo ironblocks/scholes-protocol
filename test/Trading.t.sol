@@ -133,7 +133,6 @@ contract TradingTest is Test {
         TCollateralRequirements memory colreq;
         colreq.entryCollateralRequirement = 2 ether / 10; // 0.2
         colreq.maintenanceCollateralRequirement = 1 ether / 10; // 0.1
-        colreq.liquidationPenalty = 5 ether / 10; // 0.5 = 50%
 
         obList.createScholesOptionPair(optEthUsd, colreq);
 
