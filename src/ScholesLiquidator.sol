@@ -20,7 +20,7 @@ import "./interfaces/ITimeOracle.sol";
 import "./types/TSweepOrderParams.sol";
 import "./StSCH.sol";
 
-contract ScholesLiquidator is IScholesLiquidator {
+contract ScholesLiquidator is IScholesLiquidator, Ownable {
     IScholesOption options;
     IScholesCollateral collaterals;
     ISpotPriceOracleApprovedList spotPriceOracleApprovedList;
@@ -39,7 +39,7 @@ contract ScholesLiquidator is IScholesLiquidator {
         options = IScholesOption(_options);
     }
 
-    function setFriendContracts() external {
+    function setFriendContracts() external onlyOwner {
         collaterals = options.collaterals();
         spotPriceOracleApprovedList = options.spotPriceOracleApprovedList();
         timeOracle = options.timeOracle();

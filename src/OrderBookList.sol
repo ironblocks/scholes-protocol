@@ -28,8 +28,8 @@ contract OrderBookList is IOrderBookList, Ownable {
         return list[index];
     }
 
-    function createScholesOptionPair(TOptionParams memory longOptionParams, TCollateralRequirements memory collateralReqShort) external {
-        (uint256 longId, ) = scholesOptions.createOptionPair(longOptionParams, collateralReqShort);
+    function createScholesOptionPair(TOptionParams memory longOptionParams) external {
+        (uint256 longId, ) = scholesOptions.createOptionPair(longOptionParams);
         IOrderBook ob = new OrderBook(scholesOptions, longId);
         scholesOptions.authorizeExchange(longId, address(ob));
         emit Create(list.length, address(ob), longId);

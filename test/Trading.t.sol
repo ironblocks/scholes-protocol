@@ -130,17 +130,18 @@ contract TradingTest is Test {
         optEthUsd.isAmerican = false;
         optEthUsd.isLong = true;
 
-        TCollateralRequirements memory colreq;
-        colreq.entryCollateralRequirement = 2 ether / 10; // 0.2
-        colreq.maintenanceCollateralRequirement = 1 ether / 10; // 0.1
+        // TCollateralRequirements memory colreq;
+        // colreq.entryCollateralRequirement = 2 ether / 10; // 0.2
+        // colreq.maintenanceCollateralRequirement = 1 ether / 10; // 0.1
 
-        obList.createScholesOptionPair(optEthUsd, colreq);
+        obList.createScholesOptionPair(optEthUsd);
 
         ob = obList.getOrderBook(0); // The above WETH/USDC option
         console.log("WETH/USDC order book: ", address(ob));
         longOptionId = ob.longOptionId();
         shortOptionId = options.getOpposite(longOptionId);
         console.log("Long Option Id:", longOptionId);
+        options.setCollateralRequirements(longOptionId, 0, 0, options.timeOracle().getTime(), ""); // No collateral requirements (this is dangerous!!!)
         require(keccak256("WETH") == keccak256(abi.encodePacked(options.getUnderlyingToken(longOptionId).symbol())), "WETH symbol mismatch"); // Check
         require(optEthUsd.expiration == options.getExpiration(longOptionId), "Expiration mismatch"); // Double-check
         oracle = options.spotPriceOracle(longOptionId);

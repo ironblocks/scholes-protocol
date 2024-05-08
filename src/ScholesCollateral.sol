@@ -26,7 +26,7 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         options = IScholesOption(_options);
     }
 
-    function setFriendContracts() external {
+    function setFriendContracts() external onlyOwner {
         liquidator = IScholesLiquidator(options.liquidator());
     }
 

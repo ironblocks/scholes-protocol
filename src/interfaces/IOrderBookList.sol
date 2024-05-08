@@ -12,6 +12,6 @@ interface IOrderBookList {
 
     function getLength() external view returns (uint256);
     function getOrderBook(uint256 index) external view returns (IOrderBook);
-    function createScholesOptionPair(TOptionParams memory optionParams, TCollateralRequirements memory collateralReqShort) external;
+    function createScholesOptionPair(TOptionParams memory optionParams) external;
     function removeOrderBook(uint256 index) external;
 }

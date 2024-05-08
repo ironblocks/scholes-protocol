@@ -20,6 +20,8 @@ import "./interfaces/ITimeOracle.sol";
 import "./types/TSweepOrderParams.sol";
 
 contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Supply {
+    uint public constant STALE_COLLATERAL_REQUIREMENT_TIMEOUT = 1 minutes;
+
     IScholesCollateral public collaterals;
     IScholesLiquidator public liquidator;
     ISpotPriceOracleApprovedList public spotPriceOracleApprovedList;
@@ -73,7 +75,7 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
 
     // Permissionless
     // ToDo: Restrict strike to reduce fracturing. For wrapped foreign options ignore this restriction.
-    function createOptionPair(TOptionParams memory longOptionParams, TCollateralRequirements memory collateralReqShort) external returns (uint256 longId, uint256 shortId) {
+    function createOptionPair(TOptionParams memory longOptionParams) external returns (uint256 longId, uint256 shortId) {
         require(longOptionParams.isLong, "OptionParams not Long");
         longId = calculateOptionId(longOptionParams.underlying, longOptionParams.base, longOptionParams.strike, longOptionParams.expiration, longOptionParams.isCall, longOptionParams.isAmerican, true);
         shortId = calculateOptionId(longOptionParams.underlying, longOptionParams.base, longOptionParams.strike, longOptionParams.expiration, longOptionParams.isCall, longOptionParams.isAmerican, false);
@@ -84,8 +86,6 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         require(longOptionParams.strike != 0, "No strike");
         require(longOptionParams.expiration != 0, "No expiration");
         require(longOptionParams.expiration >= timeOracle.getTime(), "Expired option");
-        require(collateralReqShort.entryCollateralRequirement != 0, "No strentry collateral requirementike");
-        require(collateralReqShort.maintenanceCollateralRequirement != 0, "No maintenance collateral requirement");
 
         options[longId].underlying = longOptionParams.underlying;
         options[longId].base = longOptionParams.base;
@@ -104,8 +104,8 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         options[shortId].isCall = longOptionParams.isCall;
         options[shortId].isAmerican = longOptionParams.isAmerican;
         options[shortId].isLong = false;
-        collateralRequirements[shortId].entryCollateralRequirement = collateralReqShort.entryCollateralRequirement;
-        collateralRequirements[shortId].maintenanceCollateralRequirement = collateralReqShort.maintenanceCollateralRequirement;
+        collateralRequirements[shortId].entryCollateralRequirement = type(uint256).max; // Cannot trade before collateral requirements are set
+        collateralRequirements[shortId].maintenanceCollateralRequirement = type(uint256).max; // Cannot trade before collateral requirements are set
     }
 
     function setFriendContracts(address _collaterals, address _liquidator, address _spotPriceOracleApprovedList, address _orderBookList, address _timeOracle, address _schToken) external onlyOwner {
@@ -168,7 +168,37 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         return spotPriceOracleApprovedList.getOracle(schToken, getBaseToken(id));
     }
 
+    // Permissionless - the reason is that the collateral requirements are set by anyone including some liquidator
+    // WARNING: In the current incomplete implementation, the collateral requirements can only set by the owner of the contract.
+    //          This shall change as soon as the proving sytem is implemented.
+    function setCollateralRequirements(uint256 id, uint256 entryCollateralRequirement, uint256 maintenanceCollateralRequirement, uint256 timestamp, bytes calldata proof) external {
+        // Can be called by anyone, but the proof must be valid
+        require(0 != id, "No id");
+        require(timeOracle.getTime() >= timestamp, "Future timestamp");
+        require(timeOracle.getTime() <= timestamp + STALE_COLLATERAL_REQUIREMENT_TIMEOUT, "Stale collateral requirements");
+        // // The proof is a signature of the hash of the id, entryCollateralRequirement, maintenanceCollateralRequirement, timestamp
+        // // Calculate the hash
+        // bytes32 hash = keccak256(abi.encodePacked(id, entryCollateralRequirement, maintenanceCollateralRequirement, timestamp));
+        // // Unpack the proof into the 3 components needed by exrecover: v, r, s
+        // require(proof.length == 65, "Invalid proof length");
+        // uint8 v;
+        // bytes32 r;
+        // bytes32 s;
+        // assembly {
+        //     r := mload(proof)
+        //     s := mload(add(proof, 32))
+        //     v := byte(0, mload(add(proof, 64)))
+        // }
+        // // Verify the proof
+        // require(ecrecover(hash, v, r, s) == owner(), "Invalid proof");
+        // Enter the values
+        collateralRequirements[id].entryCollateralRequirement = entryCollateralRequirement;
+        collateralRequirements[id].maintenanceCollateralRequirement = maintenanceCollateralRequirement;
+        collateralRequirements[id].timestamp = timestamp;
+    }
+
     function getCollateralRequirementThreshold(uint256 id, bool entry) public view returns (uint256) {
+        // !!! Uncomment this: require(timeOracle.getTime() <= collateralRequirements[id].timestamp + STALE_COLLATERAL_REQUIREMENT_TIMEOUT, "Stale collateral requirements");
         return entry ? collateralRequirements[id].entryCollateralRequirement : collateralRequirements[id].maintenanceCollateralRequirement;
     }
 
@@ -187,26 +217,11 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         requirement = collateralRequirement(balanceOf(holder, id), id, entry);
     }
 
-    // !!! New function here - enters the collateralization requirements per unit of option
-    // Params: entry threshold, maintenence threshold, id, timestamp, proof (ECDSA)
-
     function collateralRequirement(uint256 amount, uint256 id, bool entry) public view returns (uint256 requirement) {
-        ISpotPriceOracle oracle = spotPriceOracle(id);
-        // Convert all collateral into base currency (token)
-        if (options[id].isLong) requirement = 0; // Long options do not need collateral
-        else if (isCall(id)) { // Short call
-            if (oracle.getPrice() > getStrike(id)) { // ITM Call
-                requirement = (oracle.toBase(amount, oracle.getPrice() - getStrike(id)) * (1 ether + getCollateralRequirementThreshold(id, entry))) / 1 ether; // Undercollateralized ITM Call. Fully collateralized + getCollateralRequirementThreshold
-            } else {
-                requirement = (oracle.toBase(amount, getStrike(id)) * getCollateralRequirementThreshold(id, entry)) / 1 ether; // Undercollateralized OTM Call. getCollateralRequirementThreshold - refine this; should depend on IV
-            }
-        } else { // Short put
-            if (oracle.getPrice() < getStrike(id)) { // ITM Put
-                requirement = (oracle.toBase(amount, getStrike(id) - oracle.getPrice()) * (1 ether + getCollateralRequirementThreshold(id, entry))) / 1 ether; // Undercollateralized ITM Put. Fully collateralized + getCollateralRequirementThreshold
-            } else {
-                requirement = (oracle.toBase(amount, getStrike(id)) * getCollateralRequirementThreshold(id, entry)) / 1 ether; // Undercollateralized OTM Put. getCollateralRequirementThreshold - refine this; should depend on IV
-            }
-        }
+        require(0 != id, "No id");
+        requirement = (options[id].isLong) ? 
+            0 : // Long options do not need collateral
+            amount * getCollateralRequirementThreshold(id, entry) / 1 ether;
     }
 
     function getSettlementPrice(uint256 id) external view returns (uint256) {
