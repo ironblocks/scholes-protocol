@@ -174,6 +174,7 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
     function setCollateralRequirements(uint256 id, uint256 entryCollateralRequirement, uint256 maintenanceCollateralRequirement, uint256 timestamp, bytes calldata proof) external {
         // Can be called by anyone, but the proof must be valid
         require(0 != id, "No id");
+        require(!(options[id].isLong), "Only short options can have collateral requirements");
         require(timeOracle.getTime() >= timestamp, "Future timestamp");
         require(timeOracle.getTime() <= timestamp + STALE_COLLATERAL_REQUIREMENT_TIMEOUT, "Stale collateral requirements");
         // // The proof is a signature of the hash of the id, entryCollateralRequirement, maintenanceCollateralRequirement, timestamp
@@ -222,6 +223,7 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         requirement = (options[id].isLong) ? 
             0 : // Long options do not need collateral
             amount * getCollateralRequirementThreshold(id, entry) / 1 ether;
+console.log("Collateral requirement", requirement);
     }
 
     function getSettlementPrice(uint256 id) external view returns (uint256) {

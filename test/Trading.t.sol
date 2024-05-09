@@ -141,7 +141,7 @@ contract TradingTest is Test {
         longOptionId = ob.longOptionId();
         shortOptionId = options.getOpposite(longOptionId);
         console.log("Long Option Id:", longOptionId);
-        options.setCollateralRequirements(longOptionId, 0, 0, options.timeOracle().getTime(), ""); // No collateral requirements (this is dangerous!!!)
+        options.setCollateralRequirements(shortOptionId, 0, 0, options.timeOracle().getTime(), ""); // No collateral requirements (this is dangerous!!!)
         require(keccak256("WETH") == keccak256(abi.encodePacked(options.getUnderlyingToken(longOptionId).symbol())), "WETH symbol mismatch"); // Check
         require(optEthUsd.expiration == options.getExpiration(longOptionId), "Expiration mismatch"); // Double-check
         oracle = options.spotPriceOracle(longOptionId);
@@ -342,5 +342,5 @@ contract TradingTest is Test {
     }
 
     function testBad() public {
-    }
+     }
 }

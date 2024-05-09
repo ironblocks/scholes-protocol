@@ -191,7 +191,7 @@ contract Deploy is Script {
         console.log("WETH/USDC order book: ", address(ob));
         uint256 oid = ob.longOptionId();
         console.log("Long Option Id:", oid);
-        options.setCollateralRequirements(oid, 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
+        options.setCollateralRequirements(options.getOpposite(oid)/*short*/, 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
         require(keccak256("WETH") == keccak256(abi.encodePacked(options.getUnderlyingToken(oid).symbol())), "WETH symbol mismatch"); // Check
         require(opt.expiration == options.getExpiration(oid), "Expiration mismatch"); // Double-check
 
@@ -235,7 +235,7 @@ contract Deploy is Script {
         opt.isAmerican = false;
         opt.isLong = true;
         obList.createScholesOptionPair(opt);
-        options.setCollateralRequirements(obList.getOrderBook(obList.getLength()-1).longOptionId(), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
+        options.setCollateralRequirements(options.getOpposite(obList.getOrderBook(obList.getLength()-1).longOptionId()), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
         console.log("Long Option Id:", obList.getOrderBook(obList.getLength()-1).longOptionId());
         }
         
@@ -249,7 +249,7 @@ contract Deploy is Script {
         opt.isAmerican = false;
         opt.isLong = true;
         obList.createScholesOptionPair(opt);
-        options.setCollateralRequirements(obList.getOrderBook(obList.getLength()-1).longOptionId(), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
+        options.setCollateralRequirements(options.getOpposite(obList.getOrderBook(obList.getLength()-1).longOptionId()), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
         console.log("Long Option Id:", obList.getOrderBook(obList.getLength()-1).longOptionId());
         }
         
@@ -263,7 +263,7 @@ contract Deploy is Script {
         opt.isAmerican = false;
         opt.isLong = true;
         obList.createScholesOptionPair(opt);
-        options.setCollateralRequirements(obList.getOrderBook(obList.getLength()-1).longOptionId(), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
+        options.setCollateralRequirements(options.getOpposite(obList.getOrderBook(obList.getLength()-1).longOptionId()), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
         console.log("Long Option Id:", obList.getOrderBook(obList.getLength()-1).longOptionId());
         }
         
@@ -277,7 +277,7 @@ contract Deploy is Script {
         opt.isAmerican = false;
         opt.isLong = true;
         obList.createScholesOptionPair(opt);
-        options.setCollateralRequirements(obList.getOrderBook(obList.getLength()-1).longOptionId(), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
+        options.setCollateralRequirements(options.getOpposite(obList.getOrderBook(obList.getLength()-1).longOptionId()), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
         console.log("Long Option Id:", obList.getOrderBook(obList.getLength()-1).longOptionId());
         }
         
@@ -291,7 +291,7 @@ contract Deploy is Script {
         opt.isAmerican = false;
         opt.isLong = true;
         obList.createScholesOptionPair(opt);
-        options.setCollateralRequirements(obList.getOrderBook(obList.getLength()-1).longOptionId(), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
+        options.setCollateralRequirements(options.getOpposite(obList.getOrderBook(obList.getLength()-1).longOptionId()), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
         console.log("Long Option Id:", obList.getOrderBook(obList.getLength()-1).longOptionId());
         }
         
@@ -305,7 +305,7 @@ contract Deploy is Script {
         opt.isAmerican = false;
         opt.isLong = true;
         obList.createScholesOptionPair(opt);
-        options.setCollateralRequirements(obList.getOrderBook(obList.getLength()-1).longOptionId(), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
+        options.setCollateralRequirements(options.getOpposite(obList.getOrderBook(obList.getLength()-1).longOptionId()), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
         console.log("Long Option Id:", obList.getOrderBook(obList.getLength()-1).longOptionId());
         }
         
@@ -319,7 +319,7 @@ contract Deploy is Script {
         opt.isAmerican = false;
         opt.isLong = true;
         obList.createScholesOptionPair(opt);
-        options.setCollateralRequirements(obList.getOrderBook(obList.getLength()-1).longOptionId(), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
+        options.setCollateralRequirements(options.getOpposite(obList.getOrderBook(obList.getLength()-1).longOptionId()), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
         console.log("Long Option Id:", obList.getOrderBook(obList.getLength()-1).longOptionId());
         }
         
@@ -333,7 +333,7 @@ contract Deploy is Script {
         opt.isAmerican = false;
         opt.isLong = true;
         obList.createScholesOptionPair(opt);
-        options.setCollateralRequirements(obList.getOrderBook(obList.getLength()-1).longOptionId(), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
+        options.setCollateralRequirements(options.getOpposite(obList.getOrderBook(obList.getLength()-1).longOptionId()), 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
         console.log("Long Option Id:", obList.getOrderBook(obList.getLength()-1).longOptionId());
         }
         
