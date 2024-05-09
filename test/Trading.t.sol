@@ -271,7 +271,8 @@ contract TradingTest is Test {
         assert(options.isCollateralSufficient(account1, shortOptionId, false));
 
         // Mock price of WETH/USDC to 3000
-        oracle.setMockPrice(3000 * 10 ** oracle.decimals());
+        // Price does not matter: oracle.setMockPrice(3000 * 10 ** oracle.decimals());
+        options.setCollateralRequirements(shortOptionId, 0/*entry*/, 500 * 10**USDC.decimals() /*maintenance*/, options.timeOracle().getTime(), "");
 
         // Check collateralization of account1 - should be underollateralized
         assertFalse(options.isCollateralSufficient(account1, shortOptionId, false));
@@ -342,5 +343,5 @@ contract TradingTest is Test {
     }
 
     function testBad() public {
-     }
+    }
 }
