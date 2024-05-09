@@ -223,7 +223,6 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         requirement = (options[id].isLong) ? 
             0 : // Long options do not need collateral
             amount * getCollateralRequirementThreshold(id, entry) / 1 ether;
-console.log("Collateral requirement", requirement);
     }
 
     function getSettlementPrice(uint256 id) external view returns (uint256) {
