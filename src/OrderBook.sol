@@ -155,6 +155,22 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         else transferOption(to, from, uint256(-amount)); // Collateralization is enforced by the transfer
     }
 
+    function transferFees(address from, uint256 amount) internal {
+        IScholesCollateral collaterals = scholesOptions.collaterals();
+        uint256 baseToTransfer = amount;
+        uint256 baseAvailable = collaterals.balanceOf(from, collaterals.getId(longOptionId, true));
+        uint256 underlyingToTransfer; // = 0
+        if (baseAvailable < baseToTransfer) {
+            baseToTransfer = baseAvailable;
+            // Transfer the rest (unabailable base balance) in underlying
+            underlyingToTransfer = scholesOptions.spotPriceOracle(longOptionId).toSpot(amount - baseToTransfer);
+            collaterals.proxySafeTransferFrom(longOptionId, from, address(this), collaterals.getId(longOptionId, false), underlyingToTransfer);
+        }
+        // Pay in base (in full or whatever available)
+        collaterals.proxySafeTransferFrom(longOptionId, from, address(this), collaterals.getId(longOptionId, true), baseToTransfer);
+        collaterals.withdrawTo(longOptionId, feeCollector, baseToTransfer, underlyingToTransfer);
+    }
+
     function transferCollateral(address from, address to, uint256 amount) internal {
         IScholesCollateral collaterals = scholesOptions.collaterals();
         uint256 baseToTransfer = amount;
