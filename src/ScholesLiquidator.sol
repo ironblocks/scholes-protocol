@@ -27,6 +27,7 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable {
     ITimeOracle timeOracle;
     IERC20Metadata schToken;
     StSCH stSCH;
+    address feeCollector;
 
     uint256 public constant MAX_INSURANCE_PAYOUT = 10 * 10 ** 16; // (10%) Ratio insurance payout amount / total amount in insurance pool in 18 decimals
     uint256 public constant MAX_BACKSTOP_PAYOUT = 10 * 10 ** 16; // (10%) Ratio backstop payout amount / total amount in backstop pool in 18 decimals
@@ -37,6 +38,7 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable {
 
     constructor (address _options) {
         options = IScholesOption(_options);
+        feeCollector = tx.origin; // For now
     }
 
     function setFriendContracts() external onlyOwner {
@@ -66,29 +68,51 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable {
         (uint256 requirement, uint256 possession) = options.collateralRequirement(holder, id, /*entry=*/false);
         require(possession < requirement, "Not undercollateralized");
         uint256 baseId = collaterals.getId(id, true);
+        uint256 holderBalanceExOptMint = collaterals.balanceOf(holder, baseId);
         collaterals.mintCollateral(holder, baseId, /*maintenance*/requirement); // Temporary, to avoid undercollateralization on transfer. Overkill, but who cares! Cheaper on gas to avoid exact calculation
         collaterals.mintCollateral(msg.sender, baseId, /*maintenance*/requirement); // Temporary collateralize the liquidator, so that he can take over the short option position before buying it back on the market (vanishing) 
         // Now holder has enough funds to pay the liquidation penalty and transfer the option (as always the maintenance collateral is enough for this)
         { // Holder pays the penalty to liquidator optimistically
         // Liquidator does not get the premium built into this short position - it should be built into the liquidation penalty (discuss this)!!!
-        uint256 penalty = (requirement - possession) * (LIQUIDATION_PENALTY_LIQUIDATOR + LIQUIDATION_PENALTY_PROTOCOL) / 1 ether; // Expressed in base
+        uint256 penalty = (requirement - possession) * (LIQUIDATION_PENALTY_LIQUIDATOR) / 1 ether; // Expressed in base
         require(maxSacrifice <= penalty, "Irrational liquidation");
-        uint256 baseBalance = collaterals.balanceOf(holder, baseId);
-        collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, msg.sender, baseId, penalty>baseBalance?baseBalance:penalty);
-        if (penalty>baseBalance) { // not paid up
-            penalty -= baseBalance;
+        {
+        uint256 baseToPay = penalty>holderBalanceExOptMint ? holderBalanceExOptMint : penalty;
+        collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, msg.sender, baseId, baseToPay);
+        holderBalanceExOptMint -= baseToPay;
+        penalty -= baseToPay;
+        }
+        if (penalty>0) { // still not paid up
             // convert penalty to Underlying
             ISpotPriceOracle oracle = options.spotPriceOracle(id);
             penalty = oracle.toSpot(penalty);
             uint256 underlyingId = collaterals.getId(id, false);
             uint256 underlyingBalance = collaterals.balanceOf(holder, underlyingId);
-            collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, msg.sender, underlyingId, penalty>underlyingBalance?underlyingBalance:penalty);
+            collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, msg.sender, underlyingId, penalty>underlyingBalance ? underlyingBalance : penalty);
             if (penalty > underlyingBalance) {
                 // Cover from insurance fund
                 uint256 reminder = payInsurance(id, oracle.toBase(penalty - underlyingBalance));
                 reminder = payBackstop(id, reminder);
                 require (reminder <= maxSacrifice, "Risk exceeded");
             }
+        }
+        }
+        { // Holder pays the penalty to protocol optimistically
+        // Liquidator does not get the premium built into this short position - it should be built into the liquidation penalty (discuss this)!!!
+        uint256 penalty = (requirement - possession) * (LIQUIDATION_PENALTY_PROTOCOL) / 1 ether; // Expressed in base
+        {
+        uint256 baseToPay = penalty>holderBalanceExOptMint ? holderBalanceExOptMint : penalty;
+        collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, feeCollector, baseId, baseToPay);
+        holderBalanceExOptMint -= baseToPay;
+        penalty -= baseToPay;
+        }
+        if (penalty>0) { // still not paid up
+            // convert penalty to Underlying
+            ISpotPriceOracle oracle = options.spotPriceOracle(id);
+            penalty = oracle.toSpot(penalty);
+            uint256 underlyingId = collaterals.getId(id, false);
+            uint256 underlyingBalance = collaterals.balanceOf(holder, underlyingId);
+            collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, feeCollector, underlyingId, penalty>underlyingBalance ? underlyingBalance : penalty);
         }
         }
         uint256 amount = options.balanceOf(holder, id);
