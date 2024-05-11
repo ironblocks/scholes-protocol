@@ -75,22 +75,21 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable {
         require(maxSacrifice <= penalty, "Irrational liquidation");
         uint256 baseBalance = collaterals.balanceOf(holder, baseId);
         collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, msg.sender, baseId, penalty>baseBalance?baseBalance:penalty);
-        if (penalty<=baseBalance) return; // paid up
-        penalty -= baseBalance;
-        // convert penalty to Underlying
-        ISpotPriceOracle oracle = options.spotPriceOracle(id);
-        penalty = oracle.toSpot(penalty);
-        uint256 underlyingId = collaterals.getId(id, false);
-        uint256 underlyingBalance = collaterals.balanceOf(holder, underlyingId);
-        collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, msg.sender, underlyingId, penalty>underlyingBalance?underlyingBalance:penalty);
-        if (penalty > underlyingBalance) {
-            // Cover from insurance fund
-            uint256 reminder = payInsurance(id, oracle.toBase(penalty - underlyingBalance));
-            reminder = payBackstop(id, reminder);
-            require (reminder <= maxSacrifice, "Risk exceeded");
+        if (penalty>baseBalance) { // not paid up
+            penalty -= baseBalance;
+            // convert penalty to Underlying
+            ISpotPriceOracle oracle = options.spotPriceOracle(id);
+            penalty = oracle.toSpot(penalty);
+            uint256 underlyingId = collaterals.getId(id, false);
+            uint256 underlyingBalance = collaterals.balanceOf(holder, underlyingId);
+            collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, msg.sender, underlyingId, penalty>underlyingBalance?underlyingBalance:penalty);
+            if (penalty > underlyingBalance) {
+                // Cover from insurance fund
+                uint256 reminder = payInsurance(id, oracle.toBase(penalty - underlyingBalance));
+                reminder = payBackstop(id, reminder);
+                require (reminder <= maxSacrifice, "Risk exceeded");
+            }
         }
-        // no need: if (penalty<=underlyingBalance) return; // paid up
-        // no need of further calculations which burn gas
         }
         uint256 amount = options.balanceOf(holder, id);
         options.proxySafeTransferFrom(holder, msg.sender, id, amount); // Collateralization is enforced by the transfer
