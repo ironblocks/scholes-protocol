@@ -2,7 +2,6 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/console.sol";
-import "openzeppelin-contracts/access/Ownable.sol";
 import "./interfaces/IScholesOption.sol";
 import "./interfaces/IOrderBook.sol";
 import "openzeppelin-contracts/token/ERC1155/utils/ERC1155Holder.sol";
@@ -13,12 +12,12 @@ contract OrderBook is IOrderBook, ERC1155Holder {
 
     IScholesOption public scholesOptions;
     uint256 public longOptionId;
-    address owner;
+    address feeCollector;
 
-    constructor (IScholesOption options, uint256 longId) {
+    constructor (IScholesOption options, uint256 longId, address _feeCollector) {
         scholesOptions = options;
         longOptionId = longId;
-        owner = Ownable(msg.sender).owner(); // The deployer (for now)
+        feeCollector = _feeCollector;
     }
 
     struct TOrderBookItem {
@@ -54,13 +53,13 @@ contract OrderBook is IOrderBook, ERC1155Holder {
             id = bids.length;
             bids.push(TOrderBookItem(amount, price, expiration, maker));
             if (MAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
-                transferCollateral(msg.sender, owner, (uint256(amount) * MAKER_FEE) / 1 ether); // Pay the fee
+                transferCollateral(msg.sender, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(amount) * MAKER_FEE) / 1 ether, price)); // Pay the fee
             }
         } else { // Short
             id = offers.length;
             offers.push(TOrderBookItem(amount, price, expiration, maker));
             if (MAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
-                transferCollateral(msg.sender, owner, (uint256(-amount) * MAKER_FEE) / 1 ether); // Pay the fee
+                transferCollateral(msg.sender, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(-amount) * MAKER_FEE) / 1 ether, price)); // Pay the fee
             }
         }
         emit Make(id, maker, amount, price, expiration);
@@ -83,7 +82,7 @@ contract OrderBook is IOrderBook, ERC1155Holder {
             emit Take(id, offers[id].owner, taker, amount);
             if (offers[id].amount == 0) removeOrder(false, id);
             if (TAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
-                transferCollateral(msg.sender, owner, (uint256(amount) * TAKER_FEE) / 1 ether); // Pay the fee
+                transferCollateral(msg.sender, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(amount) * TAKER_FEE) / 1 ether, price)); // Pay the fee
             }
         } else { // amount < 0 ; Selling to bid
             require(price == bids[id].price, "Wrong price"); // In case order id changed before call was broadcasted
@@ -95,7 +94,7 @@ contract OrderBook is IOrderBook, ERC1155Holder {
             emit Take(id, bids[id].owner, taker, amount);
             if (bids[id].amount == 0) removeOrder(true, id);
             if (TAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
-                transferCollateral(msg.sender, owner, (uint256(-amount) * TAKER_FEE) / 1 ether); // Pay the fee
+                transferCollateral(msg.sender, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(-amount) * TAKER_FEE) / 1 ether, price)); // Pay the fee
             }
         }
     }
@@ -219,7 +218,7 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         }
     }
 
-    function status(bool isBid, uint256 id) external view returns (int256 amount, uint256 price, uint256 expiration, address _owner) {
+    function status(bool isBid, uint256 id) external view returns (int256 amount, uint256 price, uint256 expiration, address owner) {
         if (isBid) {
             require(bids.length > id, "Out of bounds");
             return (bids[id].amount, bids[id].price, bids[id].expiration, bids[id].owner);

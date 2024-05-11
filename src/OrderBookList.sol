@@ -14,9 +14,11 @@ import "./OrderBook.sol";
 contract OrderBookList is IOrderBookList, Ownable {
     IOrderBook[] public list;
     IScholesOption public scholesOptions;
+    address feeCollector;
 
     constructor (IScholesOption _scholesOptions) {
         scholesOptions = _scholesOptions;
+        feeCollector = tx.origin; // For now
     }
 
     function getLength() external view returns (uint256) {
@@ -30,7 +32,7 @@ contract OrderBookList is IOrderBookList, Ownable {
 
     function createScholesOptionPair(TOptionParams memory longOptionParams) external {
         (uint256 longId, ) = scholesOptions.createOptionPair(longOptionParams);
-        IOrderBook ob = new OrderBook(scholesOptions, longId);
+        IOrderBook ob = new OrderBook(scholesOptions, longId, feeCollector);
         scholesOptions.authorizeExchange(longId, address(ob));
         emit Create(list.length, address(ob), longId);
         list.push(ob);
