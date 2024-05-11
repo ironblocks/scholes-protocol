@@ -190,11 +190,13 @@ contract Deploy is Script {
         IOrderBook ob = obList.getOrderBook(0); // The above WETH/USDC option
         console.log("WETH/USDC order book: ", address(ob));
         uint256 oid = ob.longOptionId();
+        {
+        uint256 shortOid = options.getOpposite(oid);
         console.log("Long Option Id:", oid);
-        options.setCollateralRequirements(options.getOpposite(oid)/*short*/, 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
+        options.setCollateralRequirements(shortOid, 0, 0, timeNow, ""); // No collateral requirements (this is dangerous!!!)
         require(keccak256("WETH") == keccak256(abi.encodePacked(options.getUnderlyingToken(oid).symbol())), "WETH symbol mismatch"); // Check
         require(opt.expiration == options.getExpiration(oid), "Expiration mismatch"); // Double-check
-
+        }
         if (keccak256(bytes(vm.envString("CREATE_TEST_ORDERS"))) == keccak256(bytes("yes"))) {
             console.log("Creating some test orders");
 

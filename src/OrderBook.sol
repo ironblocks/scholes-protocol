@@ -219,7 +219,7 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         }
     }
 
-    function status(bool isBid, uint256 id) external view returns (int256 amount, uint256 price, uint256 expiration, address owner) {
+    function status(bool isBid, uint256 id) external view returns (int256 amount, uint256 price, uint256 expiration, address _owner) {
         if (isBid) {
             require(bids.length > id, "Out of bounds");
             return (bids[id].amount, bids[id].price, bids[id].expiration, bids[id].owner);
