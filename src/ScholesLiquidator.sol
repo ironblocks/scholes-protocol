@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/console.sol";
 import "chainlink/interfaces/AggregatorV3Interface.sol";
 import "openzeppelin-contracts/token/ERC1155/ERC1155.sol";
+import "openzeppelin-contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "openzeppelin-contracts/security/Pausable.sol";
 import "openzeppelin-contracts/access/Ownable.sol";
 import "openzeppelin-contracts/token/ERC1155/extensions/ERC1155Burnable.sol";
@@ -20,7 +21,7 @@ import "./interfaces/ITimeOracle.sol";
 import "./types/TSweepOrderParams.sol";
 import "./StSCH.sol";
 
-contract ScholesLiquidator is IScholesLiquidator, Ownable {
+contract ScholesLiquidator is IScholesLiquidator, Ownable, ERC1155Holder {
     IScholesOption options;
     IScholesCollateral collaterals;
     ISpotPriceOracleApprovedList spotPriceOracleApprovedList;
@@ -102,7 +103,8 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable {
         uint256 penalty = (requirement - possession) * (LIQUIDATION_PENALTY_PROTOCOL) / 1 ether; // Expressed in base
         {
         uint256 baseToPay = penalty>holderBalanceExOptMint ? holderBalanceExOptMint : penalty;
-        collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, feeCollector, baseId, baseToPay);
+        collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, address(this), baseId, baseToPay);
+        collaterals.withdrawTo(id, feeCollector, baseToPay, 0);
         holderBalanceExOptMint -= baseToPay;
         penalty -= baseToPay;
         }
@@ -112,7 +114,8 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable {
             penalty = oracle.toSpot(penalty);
             uint256 underlyingId = collaterals.getId(id, false);
             uint256 underlyingBalance = collaterals.balanceOf(holder, underlyingId);
-            collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, feeCollector, underlyingId, penalty>underlyingBalance ? underlyingBalance : penalty);
+            collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, address(this), underlyingId, penalty>underlyingBalance ? underlyingBalance : penalty);
+            collaterals.withdrawTo(id, feeCollector, 0, penalty>underlyingBalance ? underlyingBalance : penalty);
         }
         }
         uint256 amount = options.balanceOf(holder, id);

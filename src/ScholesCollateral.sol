@@ -97,6 +97,10 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
     }
 
     function withdraw(uint256 optionId, uint256 baseAmount, uint256 underlyingAmount) external {
+        withdrawTo(optionId, msg.sender, baseAmount, underlyingAmount);
+    }
+
+    function withdrawTo(uint256 optionId, address to, uint256 baseAmount, uint256 underlyingAmount) public {
         (uint256 baseBalance, uint256 underlyingBalance) = balances(msg.sender, optionId);
         require(baseBalance >= baseAmount, "Insufficient base balance");
         require(underlyingBalance >= underlyingAmount, "Insufficient underlying balance");
@@ -107,12 +111,12 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         amounts[0] = baseAmount;
         amounts[1] = underlyingAmount;
         // Optimistically withdraw
-        safeERC20Transfer(options.getBaseToken(optionId), msg.sender, baseAmount);
-        safeERC20Transfer(options.getUnderlyingToken(optionId), msg.sender, underlyingAmount);
+        safeERC20Transfer(options.getBaseToken(optionId), to, baseAmount);
+        safeERC20Transfer(options.getUnderlyingToken(optionId), to, underlyingAmount);
         // Now burn and enforce collateralization (in _burnBatch->_afterTokenTransfer)
         _burnBatch(msg.sender, ids, amounts);
         require(options.isCollateralSufficient(msg.sender, optionId, /*entry*/true), "Undercollateralized"); // See analysis in _afterTokenTransfer
-        emit Withdraw(msg.sender, optionId, baseAmount, underlyingAmount);
+        emit Withdraw(msg.sender, to, optionId, baseAmount, underlyingAmount);
     }
 
     function balances(address owner, uint256 optionId) public view returns (uint256 baseBalance, uint256 underlyingBalance) {
