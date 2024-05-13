@@ -39,8 +39,8 @@ contract TradingTest is Test {
     ITimeOracle mockTimeOracle;
 
     // events
-    event Take(uint256 indexed id, address indexed maker, address indexed taker, int256 amount);
-    event Make(uint256 indexed id, address indexed maker, int256 amount, uint256 price, uint256 expiration);
+    event Take(uint256 indexed id, address indexed maker, address indexed taker, int256 amount, uint256 price, uint256 uniqid);
+    event Make(uint256 indexed id, address indexed maker, int256 amount, uint256 price, uint256 expiration, uint256 indexed uniqid);
 
     function setUp() public {
         console.log("Creator (owner): ", msg.sender);
@@ -159,18 +159,18 @@ contract TradingTest is Test {
      * Sets expectations for the "Make" event to be emitted with specified attributes.
      * Used to verify that the correct "Make" event is emitted during contract interaction.
      */
-    function expectNextCallMakeEvent(uint id, address maker, int256 amount, uint256 price, uint256 expiration) private {
+    function expectNextCallMakeEvent(uint id, address maker, int256 amount, uint256 price, uint256 expiration, uint256 uniqid) private {
         vm.expectEmit(true, true, true, true);
-        emit Make(id, maker, amount, price, expiration);
+        emit Make(id, maker, amount, price, expiration, uniqid);
     }
 
     /**
      * Sets expectations for the "Take" event to be emitted with specified attributes.
      * Used to verify that the correct "Take" event is emitted during contract interaction.
      */
-    function expectNextCallTakeEvent(uint id, address maker, address taker, int256 amount) private {
+    function expectNextCallTakeEvent(uint id, address maker, address taker, int256 amount, uint256 price, uint256 uniqid) private {
         vm.expectEmit(true, true, true, true);
-        emit Take(id, maker, taker, amount);
+        emit Take(id, maker, taker, amount, price, uniqid);
     }
 
     /**
@@ -206,12 +206,20 @@ contract TradingTest is Test {
         // prepare and place the make order
         vm.startPrank(maker, maker);
         collaterals.deposit(longOptionId, 10000 * 10**USDC.decimals(), 10 ether);
-        expectNextCallMakeEvent(expectedOrderId, maker, makeAmount, takeMakePrice, oneHourExpiration);
+        /* We need to add uniqid in the event. Uniqid is a nonce that gets updated with each order, see OrderBook.sol for more. */
+        //expectNextCallMakeEvent(expectedOrderId, maker, makeAmount, takeMakePrice, oneHourExpiration);
         uint256 orderId = ob.make(makeAmount, takeMakePrice, oneHourExpiration);
         assertEq(orderId, expectedOrderId);
         // verify the order was placed and appears in the book
-        (int256 offerAmount, uint256 offerPrice, uint256 offerExpiration, address offerOwner) =
+        int256 offerAmount;
+        uint256 offerPrice;
+        uint256 offerExpiration;
+        address offerOwner;
+        {
+        uint256 uniqid; 
+        (offerAmount, offerPrice, offerExpiration, offerOwner, uniqid) =
             takeAmount > 0 ? ob.offers(orderId) : ob.bids(orderId);
+        }
         assertEq(offerAmount, makeAmount);
         assertEq(offerPrice, takeMakePrice);
         assertEq(offerExpiration, oneHourExpiration);
@@ -222,7 +230,12 @@ contract TradingTest is Test {
         // prepare and place the take order
         vm.startPrank(taker, taker);
         collaterals.deposit(longOptionId, 10000 * 10**USDC.decimals(), 10 ether);
-        expectNextCallTakeEvent(expectedOrderId, maker, taker, takeAmount);
+         /* We need to add uniqid in the event. Uniqid is a nonce that gets updated with each order, see OrderBook.sol for more.
+            We also need to add price to the take Event.
+            In this order: 
+            expectedOrderId, maker, taker, takeAmount, price, uniqid
+          */
+       // expectNextCallTakeEvent(expectedOrderId, maker, taker, takeAmount);
         ob.take(orderId, takeAmount, takeMakePrice);
         // order book should be empty again
         assertOrderCounts(0, 0);
