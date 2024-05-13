@@ -102,13 +102,6 @@ contract Deploy is Script {
 
         ITimeOracle mockTimeOracle = new MockTimeOracle();
         console.log("MockTimeOracle deployed: ", address(mockTimeOracle));
-
-        options.setFriendContracts(
-            address(collaterals),
-            address(oracleList),
-            address(obList),
-            address(mockTimeOracle)
-        );
         
         options.setFriendContracts(address(collaterals), address(liquidator), address(oracleList), address(obList), address(mockTimeOracle), address(SCH));
         collaterals.setFriendContracts();
