@@ -1,5 +1,7 @@
 # Scholes Protocol
 
+[![test](https://github.com/scholes-protocol/protocol/actions/workflows/test.yml/badge.svg)](https://github.com/scholes-protocol/protocol/actions/workflows/test.yml)
+
 Scholes Options Protocol provides the following:
 - Handles European and American style Options on ERC-20 assets. It manages their lifetime including collateralization, exercising and liquidation.
 - Allows the users to transfer options' ownership, seamlessly enforcing collateralization.
