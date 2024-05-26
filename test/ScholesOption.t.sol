@@ -25,7 +25,7 @@ contract ScholesOptionTest is BaseTest {
 
     function testExerciseAndSettle() public {
         oracle.setMockPrice(1700 * 10 ** oracle.decimals()); // WETH/USDC = 1700
-        mockTimeOracle.setMockTime(options.getExpiration(longOptionId) - 1000); // Not expired
+        vm.warp(options.getExpiration(longOptionId) - 1000); // Not expired
 
         // Fund account 1 with 10000 USDC collateral
         vm.startPrank(account1, account1);
@@ -47,7 +47,7 @@ contract ScholesOptionTest is BaseTest {
         oracle.setMockPrice(2100 * 10 ** oracle.decimals());
 
         // Option expires
-        mockTimeOracle.setMockTime(options.getExpiration(longOptionId) + 1);
+        vm.warp(options.getExpiration(longOptionId) + 1);
 
         // Set settlement price
         options.setSettlementPrice(longOptionId);
