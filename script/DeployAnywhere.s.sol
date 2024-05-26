@@ -36,7 +36,8 @@ contract Deploy is Script {
     uint256 constant OP_SEPOLIA_CHAINID = 11155420; // Optimism Sepolia Testnet
 
     // Use https://www.unixtimestamp.com/ to get the timestamp for the expiration dates
-    uint256 constant EXPIRATION_1 = 1714723200; //MAY 3 2024
+    uint256 constant MOCK_TIME = 1714550400; // 2024-05-01T08:00:00.000Z
+    uint256 constant EXPIRATION_1 = 1714723200; // MAY 3 2024
     uint256 constant EXPIRATION_2 = 1715328000; // May 10 2024
     uint256 constant EXPIRATION_3 = 1715932800; // May 17 2024 
     uint256 constant EXPIRATION_4 = 1716537600; // Mon Apr 01 2024 
@@ -101,6 +102,7 @@ contract Deploy is Script {
         console.log("OrderBookList deployed: ", address(obList));
 
         ITimeOracle mockTimeOracle = new MockTimeOracle();
+        mockTimeOracle.setMockTime(MOCK_TIME);
         console.log("MockTimeOracle deployed: ", address(mockTimeOracle));
         
         options.setFriendContracts(address(collaterals), address(liquidator), address(oracleList), address(obList), address(mockTimeOracle), address(SCH));
