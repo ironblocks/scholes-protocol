@@ -74,23 +74,12 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
     }
 
     // Permissionless
-    //l === no liquidation penalty
-    // m === no maintenance collateral requirement
-    // s === no strentry collateral requirement
-    // ei === alraeyd exists
-    // ol === option params not long
-    // nu === no underlying
-    // nb === no base
-    // ns === no strike
-    // ne === no expiration
-
-
     // ToDo: Restrict strike to reduce fracturing. For wrapped foreign options ignore this restriction.
     function createOptionPair(TOptionParams memory longOptionParams) external returns (uint256 longId, uint256 shortId) {
         require(longOptionParams.isLong, "OptionParams not Long");
         longId = calculateOptionId(longOptionParams.underlying, longOptionParams.base, longOptionParams.strike, longOptionParams.expiration, longOptionParams.isCall, longOptionParams.isAmerican, true);
         shortId = calculateOptionId(longOptionParams.underlying, longOptionParams.base, longOptionParams.strike, longOptionParams.expiration, longOptionParams.isCall, longOptionParams.isAmerican, false);
-        require(address(getUnderlyingToken(longId)) == address(0), "ei");
+        require(address(getUnderlyingToken(longId)) == address(0), "Option already exists");
 
         require(address(longOptionParams.underlying) != address(0), "No underlying");
         require(address(longOptionParams.base) != address(0), "No base");
@@ -242,11 +231,9 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
 
     // Permissionless
     // Should be done as soon as possible after expiration
-    // te === Too early
-    // ad === Already done
     function setSettlementPrice(uint256 id) external {
-        require(timeOracle.getTime() > options[id].expiration, "te");
-        require(options[id].settlementPrice == 0, "ad");
+        require(timeOracle.getTime() > options[id].expiration, "Too early");
+        require(options[id].settlementPrice == 0, "Already done");
         uint256 oppositeId = getOpposite(id);
         assert(options[oppositeId].settlementPrice == 0); // BUG: Inconsistent settlementPrice
         options[id].settlementPrice = options[oppositeId].settlementPrice = spotPriceOracle(id).getPrice();
@@ -261,38 +248,30 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
     // Solution 1: perform transfers instead of mint/burn
     // Solution 2: stay with mint/burn (keep tab on total supply) and revise the amounts and conversions
 
-    // iu === insufficient holding
-    // wce === Writer cannot exercise
-    // sai === Settlement amounts imbalance
-    // nsp === No settlement price
-    // ne === Not elligible
-
     /// @notice amount == 0 means exercise entire holding
     /// @param _holders List of holder addresses to act as counterparties when American Options are settled
     /// @param amounts List of amounts to be settled for each of the above _holders
     /// @notice _holders and amounts are ignored for European Options or American Options that are exercised/settled after expiration
     function exercise(uint256 id, uint256 amount, bool toUnderlying, address[] memory _holders, uint256[] memory amounts) external {
-        require(options[id].isAmerican || timeOracle.getTime() > options[id].expiration, "ne");
-        require(options[id].isLong, "wce");
-        require(balanceOf(msg.sender, id) >= amount, "iu");
+        require(options[id].isAmerican || timeOracle.getTime() > options[id].expiration, "Not elligible");
+        require(options[id].isLong, "Writer cannot exercise");
+        require(balanceOf(msg.sender, id) >= amount, "Insufficient holding");
         if (amount == 0) amount = balanceOf(msg.sender, id);
         if (options[id].isAmerican && options[id].expiration <= timeOracle.getTime()) {
             // ISpotPriceOracle oracle = spotPriceOracle(id);
             // Allow OTM exercise: require(options[id].isCall ? oracle.getPrice() >= options[id].strike : oracle.getPrice() <= options[id].strike, "OTM");
             exercise(id, amount, true, toUnderlying); // Exercise long option
             // Settle short named counterparties
-
-            //ia === Insufficient amount
             uint256 totalSettled; // = 0
             uint256 shortId = getOpposite(id);
             for (uint256 i = 0; i < _holders.length; i++) {
-                require(balanceOf(_holders[i], shortId) >= amounts[i], "ia");
+                require(balanceOf(_holders[i], shortId) >= amounts[i], "Insufficient amount");
                 settle(_holders[i], shortId, amounts[i], true);
                 totalSettled += amounts[i];
             }
-            require(amount == totalSettled, "sai");
+            require(amount == totalSettled, "Settlement amounts imbalance");
         } else {
-            require(options[id].settlementPrice != 0, "nsp"); // Expired and settlement price set
+            require(options[id].settlementPrice != 0, "No settlement price"); // Expired and settlement price set
             assert(timeOracle.getTime() > options[id].expiration); // BUG: Settlement price set before expiration
             if (options[id].isCall ? options[id].settlementPrice <= options[id].strike : options[id].settlementPrice >= options[id].strike) { // Expire worthless
                 _burn(msg.sender, id, balanceOf(msg.sender, id)); // BTW, the collateral stays untouched
@@ -358,11 +337,9 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
     }
 
     // Should be called by the holder 
-    // ow === Only Writers
-    // ne === Not elligible
     function settle(uint256 id) external {
-        require(timeOracle.getTime() > options[id].expiration, "ne");
-        require(! options[id].isLong, "ow");
+        require(timeOracle.getTime() > options[id].expiration, "Not elligible");
+        require(! options[id].isLong, "Only Writers can settle");
         settle(msg.sender, id, balanceOf(msg.sender, id), false);
     }
 
@@ -453,11 +430,9 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
 
             // Transfer was optimistically completed
             // Now enforce entry collateral requirements
-            // uos === Undercollateralized option sender
-            // uor === Undercollateralized option receipient
             if (! isLong(id)) { // because Long options do not require collateral
-                require(isCollateralSufficient(from, id, /*entry*/false), "uos"); // Reducing short position - enforce only maintenance collateralization
-                require(isCollateralSufficient(to, id, /*entry*/true), "uor"); // Increasing short position - enforce entry collateralization
+                require(isCollateralSufficient(from, id, /*entry*/false), "Undercollateralized option sender"); // Reducing short position - enforce only maintenance collateralization
+                require(isCollateralSufficient(to, id, /*entry*/true), "Undercollateralized option receipient"); // Increasing short position - enforce entry collateralization
             }
 
             // Maintain holders
