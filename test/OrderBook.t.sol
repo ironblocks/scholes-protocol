@@ -151,4 +151,135 @@ contract OrderBookTest is BaseTest {
         int256 takeAmount = -1 ether;
         _testTakeHelper(takeAmount);
     }
+
+    /**
+     * Test the cancel function on an empty array.
+     * Ensures that canceling a bid or offer on an empty order book reverts with an out-of-bounds error.
+     */
+    function testCancelOutOfBounds() public {
+        // Order book should be empty at first
+        assertOrderCounts(0, 0);
+        uint256 orderId = 0;
+        bool isBid = true;
+        vm.expectRevert(stdError.indexOOBError);
+        ob.cancel(isBid, orderId);
+        isBid = false;
+        vm.expectRevert(stdError.indexOOBError);
+        ob.cancel(isBid, orderId);
+    }
+
+    /**
+     * Test the cancel function with an unauthorized user.
+     * Ensures that canceling a bid or offer by a non-owner reverts with an "Unauthorized" error.
+     */
+    function testCancelUnauthorized() public {
+        address owner = account1;
+        address unauthorizedUser = account2;
+        // Order book should be empty at first
+        assertOrderCounts(0, 0);
+        // Add a bid and an offer
+        vm.startPrank(owner);
+        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        uint256 bidOrderId = ob.make(1 ether, 1 ether, oneHourExpiration);
+        bool isBid = true;
+        bool isMine = ob.isMine(isBid, bidOrderId);
+        assertEq(isMine, true);
+        uint256 offerOrderId = ob.make(-1 ether, 1 ether, oneHourExpiration);
+        isBid = false;
+        isMine = ob.isMine(isBid, offerOrderId);
+        assertEq(isMine, true);
+        assertOrderCounts(1, 1);
+        vm.startPrank(unauthorizedUser);
+        // Try to cancel the bid with an unauthorized user
+        isBid = true;
+        isMine = ob.isMine(isBid, bidOrderId);
+        assertEq(isMine, false);
+        vm.expectRevert("Unauthorized");
+        ob.cancel(isBid, bidOrderId);
+        // Ensure the orders are still present
+        assertOrderCounts(1, 1);
+        // Try to cancel the offer with an unauthorized user
+        isBid = false;
+        isMine = ob.isMine(isBid, offerOrderId);
+        assertEq(isMine, false);
+        vm.expectRevert("Unauthorized");
+        ob.cancel(isBid, offerOrderId);
+        // Ensure the orders are still present
+        assertOrderCounts(1, 1);
+    }
+
+    /**
+     * Test the cancel function on the last order in the order book.
+     * Ensures that canceling the last bid or offer removes it correctly and updates the order counts.
+     */
+    function testCancelLastOrder() public {
+        // Order book should be empty at first
+        assertOrderCounts(0, 0);
+        int256 makeAmount = 1 ether;
+        uint256 makePrice = 1 ether;
+        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        uint256 bidOrderId = ob.make(makeAmount, makePrice, oneHourExpiration);
+        assertOrderCounts(1, 0);
+        makeAmount = -1 ether;
+        uint256 offerOrderId = ob.make(makeAmount, makePrice, oneHourExpiration);
+        assertOrderCounts(1, 1);
+        bool isBid = true;
+        ob.cancel(isBid, bidOrderId);
+        assertOrderCounts(0, 1);
+        isBid = false;
+        ob.cancel(isBid, offerOrderId);
+        assertOrderCounts(0, 0);
+    }
+
+    /**
+     * Test the cancel function when canceling a non-last bid.
+     * Ensures that canceling a bid that is not the last one rearranges the order book correctly.
+     */
+    function testCancelNonLastBid() public {
+        // Order book should be empty at first
+        assertOrderCounts(0, 0);
+        // Add multiple bids
+        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        uint256 bidOrderId1 = ob.make(1 ether, 1 ether, oneHourExpiration);
+        uint256 bidOrderId2 = ob.make(2 ether, 2 ether, oneHourExpiration);
+        uint256 bidOrderId3 = ob.make(3 ether, 3 ether, oneHourExpiration);
+        assertEq(bidOrderId3, 2);
+        assertOrderCounts(3, 0);
+        // Cancel the second bid
+        bool isBid = true;
+        ob.cancel(isBid, bidOrderId2);
+        assertOrderCounts(2, 0);
+        // Check the remaining orders
+        (int256 amount1,,,) = ob.status(isBid, bidOrderId1);
+        assertEq(amount1, 1 ether);
+        // The 3rd order now has the bidOrderId2
+        (int256 amount2,,,) = ob.status(isBid, bidOrderId2);
+        assertEq(amount2, 3 ether);
+    }
+
+    /**
+     * Test the cancel function when canceling a non-last offer.
+     * Ensures that canceling an offer that is not the last one rearranges the order book correctly.
+     */
+    function testCancelNonLastOffer() public {
+        // Order book should be empty at first
+        assertOrderCounts(0, 0);
+        // Add multiple offers
+        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        uint256 offerOrderId1 = ob.make(-1 ether, 1 ether, oneHourExpiration);
+        uint256 offerOrderId2 = ob.make(-2 ether, 2 ether, oneHourExpiration);
+        uint256 offerOrderId3 = ob.make(-3 ether, 3 ether, oneHourExpiration);
+        assertEq(offerOrderId3, 2);
+        assertOrderCounts(0, 3);
+        // Cancel the second offer
+        bool isBid = false;
+        ob.cancel(isBid, offerOrderId2);
+        assertOrderCounts(0, 2);
+        // Check the remaining orders
+        (int256 amount1,,,) = ob.status(isBid, offerOrderId1);
+        assertEq(amount1, -1 ether);
+        // The 3rd order now has the offerOrderId2
+        (int256 amount2,,,) = ob.status(isBid, offerOrderId2);
+        assertEq(amount2, -3 ether);
+    }
 }
