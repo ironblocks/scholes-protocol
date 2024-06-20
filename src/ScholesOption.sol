@@ -74,10 +74,10 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
     }
 
     // Permissionless
-    //l === no liquidation penalty
+    // l === no liquidation penalty
     // m === no maintenance collateral requirement
     // s === no strentry collateral requirement
-    // ei === alraeyd exists
+    // ei === already exists
     // ol === option params not long
     // nu === no underlying
     // nb === no base
@@ -181,7 +181,7 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
 
     // Permissionless - the reason is that the collateral requirements are set by anyone including some liquidator
     // WARNING: In the current incomplete implementation, the collateral requirements can only set by the owner of the contract.
-    //          This shall change as soon as the proving sytem is implemented.
+    //          This shall change as soon as the proving system is implemented.
     function setCollateralRequirements(uint256 id, uint256 entryCollateralRequirement, uint256 maintenanceCollateralRequirement, uint256 timestamp, bytes calldata proof) external {
         // Can be called by anyone, but the proof must be valid
         require(0 != id, "No id");
@@ -265,7 +265,7 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
     // wce === Writer cannot exercise
     // sai === Settlement amounts imbalance
     // nsp === No settlement price
-    // ne === Not elligible
+    // ne === Not eligible
 
     /// @notice amount == 0 means exercise entire holding
     /// @param _holders List of holder addresses to act as counterparties when American Options are settled
@@ -335,8 +335,8 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
             }
             // Now pay for it in Base
             convPrice = options[id].strike; // reduce stack space
-            collaterals.burnCollateral(msg.sender, baseId, oracle.toBase(amount, convPrice)); // Fails if insufficient: should never hapen if maintenance collateralization rules are good
-            // If not possible (the above reverts), the holder shoud convert collateral from underlying to base and retry - that's his responsibility
+            collaterals.burnCollateral(msg.sender, baseId, oracle.toBase(amount, convPrice)); // Fails if insufficient: should never happen if maintenance collateralization rules are good
+            // If not possible (the above reverts), the holder should convert collateral from underlying to base and retry - that's his responsibility
         } else { // is Put
             // Optimistically get paid for the option
             convPrice = options[id].strike;
@@ -359,7 +359,7 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
 
     // Should be called by the holder 
     // ow === Only Writers
-    // ne === Not elligible
+    // ne === Not eligible
     function settle(uint256 id) external {
         require(timeOracle.getTime() > options[id].expiration, "ne");
         require(! options[id].isLong, "ow");

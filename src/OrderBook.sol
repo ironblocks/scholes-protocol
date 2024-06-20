@@ -35,7 +35,7 @@ contract OrderBook is IOrderBook, ERC1155Holder {
     TOrderBookItem[] public offers; // offers[offerId]
 
     // Can be called by anyone permissionlessly to free up storage.
-    // Usually called by OrderBookLise.removeOrderBook.
+    // Usually called by OrderBookList.removeOrderBook.
     function destroy() external {
         require(scholesOptions.timeOracle().getTime() > scholesOptions.getExpiration(longOptionId), "Not expired");
         // selfdestruct(payable(msg.sender)); - deprecated
@@ -119,7 +119,7 @@ contract OrderBook is IOrderBook, ERC1155Holder {
             for (uint256 index = 0; index < makers.length; index++)
                 toDeposit += scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption(uint256(makers[index].amount), makers[index].price);
             toDeposit += scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption(uint256(toMake.amount), toMake.price);
-            // To avoid separate authorization for each transfer, we deposit base collteral to this contract and then transfer it to the caller
+            // To avoid separate authorization for each transfer, we deposit base collateral to this contract and then transfer it to the caller
             { // Safe ERC20 transfer - take the deposit from the caller
                 // bytes4(keccak256(bytes('transferFrom(address,address,uint256)')));
                 (bool success, bytes memory data) = address(scholesOptions.getBaseToken(longOptionId)).call(abi.encodeWithSelector(0x23b872dd, msg.sender, address(this), toDeposit));
