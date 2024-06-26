@@ -116,9 +116,10 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         if (forceFunding /* && isBuy */) { // Collateralize with base collateral
             // Calculate funding
             uint256 toDeposit = 0;
-            for (uint256 index = 0; index < makers.length; index++)
-                toDeposit += scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption(uint256(makers[index].amount), makers[index].price);
-            toDeposit += scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption(uint256(toMake.amount), toMake.price);
+            for (uint256 index = 0; index < makers.length; index++) {
+                toDeposit += scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption(uint256(makers[index].amount) * (1 ether + TAKER_FEE) / 1 ether, makers[index].price);
+            }
+            toDeposit += scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption(uint256(toMake.amount) * (1 ether + MAKER_FEE) / 1 ether, toMake.price);
             // To avoid separate authorization for each transfer, we deposit base collateral to this contract and then transfer it to the caller
             { // Safe ERC20 transfer - take the deposit from the caller
                 // bytes4(keccak256(bytes('transferFrom(address,address,uint256)')));
