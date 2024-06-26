@@ -54,15 +54,9 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         if (amount > 0) { // Long
             id = bids.length;
             bids.push(TOrderBookItem(amount, price, expiration, maker, uniqidNonce));
-            if (MAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
-                transferCollateral(msg.sender, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(amount) * MAKER_FEE) / 1 ether, price)); // Pay the fee
-            }
         } else { // Short
             id = offers.length;
             offers.push(TOrderBookItem(amount, price, expiration, maker, uniqidNonce));
-            if (MAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
-                transferCollateral(msg.sender, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(-amount) * MAKER_FEE) / 1 ether, price)); // Pay the fee
-            }
         }
    
         emit Make(id, maker, amount, price, expiration, uniqidNonce);
@@ -88,6 +82,9 @@ contract OrderBook is IOrderBook, ERC1155Holder {
             if (TAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
                 transferCollateral(msg.sender, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(amount) * TAKER_FEE) / 1 ether, price)); // Pay the fee
             }
+            if (MAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
+                transferCollateral(offers[id].owner, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(amount) * MAKER_FEE) / 1 ether, price)); // Pay the fee
+            }
         } else { // amount < 0 ; Selling to bid
             require(price == bids[id].price, "Wrong price"); // In case order id changed before call was broadcasted
             require(taker != bids[id].owner, "Self");
@@ -99,6 +96,9 @@ contract OrderBook is IOrderBook, ERC1155Holder {
             if (bids[id].amount == 0) removeOrder(true, id);
             if (TAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
                 transferCollateral(msg.sender, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(-amount) * TAKER_FEE) / 1 ether, price)); // Pay the fee
+            }
+            if (MAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
+                transferCollateral(bids[id].owner, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(-amount) * MAKER_FEE) / 1 ether, price)); // Pay the fee
             }
         }
     }
