@@ -35,7 +35,7 @@ contract OrderBook is IOrderBook, ERC1155Holder {
     TOrderBookItem[] public offers; // offers[offerId]
 
     // Can be called by anyone permissionlessly to free up storage.
-    // Usually called by OrderBookLise.removeOrderBook.
+    // Usually called by OrderBookList.removeOrderBook.
     function destroy() external {
         require(scholesOptions.timeOracle().getTime() > scholesOptions.getExpiration(longOptionId), "Not expired");
         // selfdestruct(payable(msg.sender)); - deprecated
@@ -54,15 +54,9 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         if (amount > 0) { // Long
             id = bids.length;
             bids.push(TOrderBookItem(amount, price, expiration, maker, uniqidNonce));
-            if (MAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
-                transferCollateral(msg.sender, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(amount) * MAKER_FEE) / 1 ether, price)); // Pay the fee
-            }
         } else { // Short
             id = offers.length;
             offers.push(TOrderBookItem(amount, price, expiration, maker, uniqidNonce));
-            if (MAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
-                transferCollateral(msg.sender, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(-amount) * MAKER_FEE) / 1 ether, price)); // Pay the fee
-            }
         }
    
         emit Make(id, maker, amount, price, expiration, uniqidNonce);
@@ -88,6 +82,9 @@ contract OrderBook is IOrderBook, ERC1155Holder {
             if (TAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
                 transferCollateral(msg.sender, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(amount) * TAKER_FEE) / 1 ether, price)); // Pay the fee
             }
+            if (MAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
+                transferCollateral(offers[id].owner, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(amount) * MAKER_FEE) / 1 ether, price)); // Pay the fee
+            }
         } else { // amount < 0 ; Selling to bid
             require(price == bids[id].price, "Wrong price"); // In case order id changed before call was broadcasted
             require(taker != bids[id].owner, "Self");
@@ -99,6 +96,9 @@ contract OrderBook is IOrderBook, ERC1155Holder {
             if (bids[id].amount == 0) removeOrder(true, id);
             if (TAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
                 transferCollateral(msg.sender, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(-amount) * TAKER_FEE) / 1 ether, price)); // Pay the fee
+            }
+            if (MAKER_FEE > 0) { // Save gas (hopefully the compiler will optimize this out)
+                transferCollateral(bids[id].owner, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(-amount) * MAKER_FEE) / 1 ether, price)); // Pay the fee
             }
         }
     }
@@ -116,10 +116,11 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         if (forceFunding /* && isBuy */) { // Collateralize with base collateral
             // Calculate funding
             uint256 toDeposit = 0;
-            for (uint256 index = 0; index < makers.length; index++)
-                toDeposit += scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption(uint256(makers[index].amount), makers[index].price);
-            toDeposit += scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption(uint256(toMake.amount), toMake.price);
-            // To avoid separate authorization for each transfer, we deposit base collteral to this contract and then transfer it to the caller
+            for (uint256 index = 0; index < makers.length; index++) {
+                toDeposit += scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption(uint256(makers[index].amount) * (1 ether + TAKER_FEE) / 1 ether, makers[index].price);
+            }
+            toDeposit += scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption(uint256(toMake.amount) * (1 ether + MAKER_FEE) / 1 ether, toMake.price);
+            // To avoid separate authorization for each transfer, we deposit base collateral to this contract and then transfer it to the caller
             { // Safe ERC20 transfer - take the deposit from the caller
                 // bytes4(keccak256(bytes('transferFrom(address,address,uint256)')));
                 (bool success, bytes memory data) = address(scholesOptions.getBaseToken(longOptionId)).call(abi.encodeWithSelector(0x23b872dd, msg.sender, address(this), toDeposit));

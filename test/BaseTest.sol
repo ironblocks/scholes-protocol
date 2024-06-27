@@ -104,7 +104,7 @@ contract BaseTest is Test {
         optEthUsd.underlying = WETH;
         optEthUsd.base = USDC;
         optEthUsd.strike = 2000 * 10 ** oracleEthUsd.decimals();
-        optEthUsd.expiration = block.timestamp + 30 * 24 * 60 * 60; // 30 days from now
+        optEthUsd.expiration = block.timestamp + 30 days;
         optEthUsd.isCall = true;
         optEthUsd.isAmerican = false;
         optEthUsd.isLong = true;
@@ -135,5 +135,11 @@ contract BaseTest is Test {
         vm.startPrank(account2, account2);
         USDC.approve(address(collaterals), type(uint256).max);
         WETH.approve(address(collaterals), type(uint256).max);
+
+        vm.startPrank(account3, account3);
+        USDC.approve(address(collaterals), type(uint256).max);
+        WETH.approve(address(collaterals), type(uint256).max);
+        USDC.approve(address(ob), type(uint256).max);
+        WETH.approve(address(ob), type(uint256).max);
     }
 }

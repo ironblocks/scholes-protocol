@@ -33,8 +33,8 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable, ERC1155Holder {
     uint256 public constant MAX_INSURANCE_PAYOUT = 10 * 10 ** 16; // (10%) Ratio insurance payout amount / total amount in insurance pool in 18 decimals
     uint256 public constant MAX_BACKSTOP_PAYOUT = 10 * 10 ** 16; // (10%) Ratio backstop payout amount / total amount in backstop pool in 18 decimals
     uint256 public constant LIQUIDATION_PENALTY_LIQUIDATOR = 15 * 10 ** 16; // (15%) Ratio liquidation penalty amount / missing collateral in 18 decimals
-    uint256 public constant LIQUIDATION_PENALTY_PROTOCOL = 5 * 10 ** 16; // (15%) Ratio liquidation penalty amount / missing collateral in 18 decimals
-    uint256 public constant LIQUIDATION_PENALTY_PROTOCOL_TO_INSURANCE = 100 * 10 ** 16; // (100% initially) Ratio liquidation penalty paid to the protocol to ho to the insurance fund
+    uint256 public constant LIQUIDATION_PENALTY_PROTOCOL = 5 * 10 ** 16; // (5%) Ratio liquidation penalty amount / missing collateral in 18 decimals
+    uint256 public constant LIQUIDATION_PENALTY_PROTOCOL_TO_INSURANCE = 100 * 10 ** 16; // (100% initially) Ratio liquidation penalty paid to the protocol to go to the insurance fund
     uint256 public constant DUST = 1_000_000_000;
 
     constructor (address _options) {
@@ -50,7 +50,7 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable, ERC1155Holder {
         stSCH = new StSCH("Staked SCH", "stSCH");
     }
 
-    function estimateLiqudationPenalty(address holder, uint256 id) external view returns (uint256 penalty, uint256 collectable) {
+    function estimateLiquidationPenalty(address holder, uint256 id) external view returns (uint256 penalty, uint256 collectable) {
         require(timeOracle.getTime() <= options.getExpiration(id), "Expired option");
         (uint256 requirement, uint256 possession) = options.collateralRequirement(holder, id, false);
         if (possession >= requirement) return(0, 0);
@@ -92,9 +92,9 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable, ERC1155Holder {
             collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, msg.sender, underlyingId, penalty>underlyingBalance ? underlyingBalance : penalty);
             if (penalty > underlyingBalance) {
                 // Cover from insurance fund
-                uint256 reminder = payInsurance(id, oracle.toBase(penalty - underlyingBalance));
-                reminder = payBackstop(id, reminder);
-                require (reminder <= maxSacrifice, "Risk exceeded");
+                uint256 remainder = payInsurance(id, oracle.toBase(penalty - underlyingBalance));
+                remainder = payBackstop(id, remainder);
+                require (remainder <= maxSacrifice, "Risk exceeded");
             }
         }
         }
@@ -132,7 +132,7 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable, ERC1155Holder {
         emit Liquidate(id, holder, msg.sender);
     }
 
-    function payInsurance(uint256 optionId, uint256 amount) internal returns (uint256 reminder) {
+    function payInsurance(uint256 optionId, uint256 amount) internal returns (uint256 remainder) {
         // Obtain the ERC20 token address of baseId
         IERC20 baseToken = options.getBaseToken(optionId);
         // Here convert insurance pool from other tokens/currencies if needed
@@ -142,11 +142,11 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable, ERC1155Holder {
         uint256 payout = amount > limit ? limit : amount;
         // Transfer the amount from the insurance fund to the liquidator up to the limit
         collaterals.deposit(optionId, payout, /*underlyingAmount=*/0);
-        // Return the reminder
+        // Return the remainder
         return amount - payout;
     }
 
-    function payBackstop(uint256 optionId, uint256 amount) internal returns (uint256 reminder) {
+    function payBackstop(uint256 optionId, uint256 amount) internal returns (uint256 remainder) {
         // Calculate the limit of the backstop fund
         uint256 backstopBalance = schToken.balanceOf(address(this));
         uint256 limit = backstopBalance * MAX_BACKSTOP_PAYOUT / 1 ether;
@@ -154,7 +154,7 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable, ERC1155Holder {
         uint256 payout = amountSCH > limit ? limit : amountSCH;
         // Transfer the amount from the backstop fund to the liquidator up to the limit
         schToken.transfer(msg.sender, payout);
-        // Return the reminder
+        // Return the remainder
         return amount - schToBase(optionId, payout);
     }
 
