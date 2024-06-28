@@ -400,6 +400,49 @@ contract OrderBookTest is BaseTest {
     }
 
     /**
+     * Test the `sweepAndMake` function to ensure it correctly handles full order matching and no make.
+     * This is a regression test for a fix introduced in 1ce1c21, prior the fix the error was:
+     * Reason: revert: ERC1155: insufficient balance for transfer
+     */
+    function testSweepAndMakeNoMake() public {
+        // Order book should be empty at first
+        assertOrderCounts(0, 0);
+        oracle.setMockPrice(2000 * 10 ** oracle.decimals());
+        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        uint256 twoHourExpiration = mockTimeOracle.getTime() + 2 hours;
+        // Account1 makes an offer
+        vm.startPrank(account1);
+        uint256 offerId = ob.make(-5 ether, 1 ether, oneHourExpiration);
+        // Account2 places a bid
+        vm.startPrank(account2);
+        uint256 bidId = ob.make(5 ether, 1 ether, oneHourExpiration);
+        // We now have 2 orders on the book
+        assertOrderCounts(1, 1);
+        // Prepare the sweep and make to fully take from offerId
+        TTakerEntry[] memory makers = new TTakerEntry[](1);
+        makers[0] = TTakerEntry(offerId, 5 ether, 1 ether);
+        TMakerEntry memory toMake = TMakerEntry(0, 0, twoHourExpiration);
+        // Prepare the account3 for the sweep and make
+        vm.startPrank(account3);
+        bool forceFunding = true;
+        uint256 newOrderId = ob.sweepAndMake(forceFunding, makers, toMake);
+        // no new order ID since no `toMake`
+        assertEq(newOrderId, 0);
+        // The offer was fully matched and removed from the order book
+        assertOrderCounts(1, 0);
+        // Now let's check each order book item in detail to verify that
+        // The bid wasn't matching and shouldn't have been touched
+        {
+            bool isBid = true;
+            int256 expectedAmount = 5 ether;
+            uint256 expectedPrice = 1 ether;
+            uint256 expectedExpiration = oneHourExpiration;
+            address expectedOwner = account2;
+            assertOrder(isBid, bidId, expectedAmount, expectedPrice, expectedExpiration, expectedOwner);
+        }
+    }
+
+    /**
      * Test the `sweepAndMake` function for "Inconsistent component orders" case.
      * This should revert with the message "Inconsistent component orders".
      */
