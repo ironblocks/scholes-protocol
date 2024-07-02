@@ -145,6 +145,40 @@ contract OrderBookTest is BaseTest {
     }
 
     /**
+     * Test the destroy function when the contract is not expired.
+     * Ensures that calling destroy before expiration reverts with the message "Not expired".
+     */
+    function testDestroyNotExpired() public {
+        // Try to destroy the order book before expiration
+        vm.expectRevert("Not expired");
+        ob.destroy();
+    }
+
+    /**
+     * Test the destroy function when the contract is expired.
+     * Ensures that calling destroy after expiration deletes the bids and offers correctly.
+     */
+    function testDestroyAfterExpiration() public {
+        // Set up the order book with initial orders
+        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        // place a couple of orders
+        ob.make(-5 ether, 1 ether, oneHourExpiration);
+        ob.make(5 ether, 1 ether, oneHourExpiration);
+        // We now have 2 orders on the book
+        assertOrderCounts(1, 1);
+        // Move time forward to after the expiration of the option
+        vm.warp(options.getExpiration(longOptionId) + 1);
+        // Destroy the order book
+        ob.destroy();
+        // Ensure the order book is empty
+        assertOrderCounts(0, 0);
+        // Destroy can be called multiple times with no issue
+        ob.destroy();
+        // Ensure the order book remains empty
+        assertOrderCounts(0, 0);
+    }
+
+    /**
      * A helper function to abstract the common logic for testing the "take" functionality.
      * This function sets up an initial order, executes a take operation, and then verifies
      * the state of the order book post-operation. It is designed to be reusable for testing
