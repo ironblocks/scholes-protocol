@@ -557,4 +557,94 @@ contract OrderBookTest is BaseTest {
         vm.expectRevert("Cannot force funding for sell orders");
         ob.sweepAndMake(forceFunding, makers, toMake);
     }
+
+    /**
+     * Test the vanish function with a valid liquidation.
+     * Ensures that calling vanish correctly processes the list of orders and liquidates up to the specified amount.
+     */
+    function testVanishValid() public {
+        // Set up the order book with initial orders
+        oracle.setMockPrice(2000 * 10 ** oracle.decimals());
+        uint256 collateralsId = collaterals.getId(shortOptionId, true);
+        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        // Account1 makes an offer
+        vm.startPrank(account1);
+        collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 10 ether);
+        ob.make(-1 ether, 1 ether, oneHourExpiration);
+        // Account2 places bids
+        vm.startPrank(account2);
+        collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 10 ether);
+        uint256 bidId1 = ob.make(2 ether, 1 ether, oneHourExpiration);
+        uint256 bidId2 = ob.make(3 ether, 1 ether, oneHourExpiration);
+        // We now have 3 orders on the book
+        assertOrderCounts(2, 1);
+        // Check the balances before
+        uint256 collateralsBalanceBefore = collaterals.balanceOf(account3, collateralsId);
+        uint256 optionsBalanceBefore = options.balanceOf(account3, shortOptionId);
+        assertEq(collateralsBalanceBefore, 0);
+        assertEq(optionsBalanceBefore, 0);
+        // Prepare the vanish operation
+        TTakerEntry[] memory makers = new TTakerEntry[](2);
+        makers[0] = TTakerEntry(bidId2, -3 ether, 1 ether);
+        makers[1] = TTakerEntry(bidId1, -2 ether, 1 ether);
+        // Execute the vanish operation
+        vm.startPrank(account3);
+        ob.vanish(account3, makers, 5 ether);
+        // The two bids were matched
+        assertOrderCounts(0, 1);
+        // The account3 balances increased
+        uint256 collateralsBalanceAfter = collaterals.balanceOf(account3, collateralsId);
+        uint256 optionsBalanceAfter = options.balanceOf(account3, shortOptionId);
+        assertEq(collateralsBalanceAfter, 4985000); // amount in 6 decimals minus the fees
+        assertEq(optionsBalanceAfter, 5 * 10 ** 18); // amount in 18 decimals
+    }
+
+    /**
+     * Test the vanish function with an oversold condition.
+     * Ensures that calling vanish with a specified amount lower than the orders total reverts with "Vanish oversold".
+     */
+    function testVanishOversold() public {
+        // Set up the order book with initial orders
+        oracle.setMockPrice(2000 * 10 ** oracle.decimals());
+        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        // Account1 places bids
+        vm.startPrank(account1);
+        collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 10 ether);
+        uint256 bidId1 = ob.make(2 ether, 1 ether, oneHourExpiration);
+        uint256 bidId2 = ob.make(3 ether, 1 ether, oneHourExpiration);
+        // We now have 2 bids on the book
+        assertOrderCounts(2, 0);
+        // Prepare the vanish operation
+        TTakerEntry[] memory makers = new TTakerEntry[](2);
+        makers[0] = TTakerEntry(bidId2, -3 ether, 1 ether);
+        makers[1] = TTakerEntry(bidId1, -2 ether, 1 ether);
+        // Execute the vanish operation expecting a revert
+        vm.startPrank(account2);
+        vm.expectRevert("Vanish oversold");
+        ob.vanish(account2, makers, 4 ether);
+    }
+
+    /**
+     * Test the `vanish` function for "Inconsistent component orders" case.
+     * This should revert with the message "Inconsistent component orders".
+     */
+    function testVanishInconsistentComponentOrders() public {
+        oracle.setMockPrice(2000 * 10 ** oracle.decimals());
+        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        // Account1 places bids
+        vm.startPrank(account1);
+        collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 10 ether);
+        uint256 bidId1 = ob.make(2 ether, 1 ether, oneHourExpiration);
+        uint256 bidId2 = ob.make(3 ether, 1 ether, oneHourExpiration);
+        // We now have 2 bids on the book
+        assertOrderCounts(2, 0);
+        // Prepare the vanish operation with inconsistent maker amounts
+        TTakerEntry[] memory makers = new TTakerEntry[](2);
+        makers[0] = TTakerEntry(bidId1, -1.5 ether, 1 ether); // Negative amount, valid for sell
+        makers[1] = TTakerEntry(bidId2, 1.5 ether, 1 ether); // Positive amount, invalid for sell
+        // Execute the vanish operation expecting a revert
+        vm.startPrank(account2);
+        vm.expectRevert("Inconsistent component orders");
+        ob.vanish(account2, makers, 5 ether);
+    }
 }
