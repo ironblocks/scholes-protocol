@@ -397,7 +397,7 @@ contract OrderBookTest is BaseTest {
         // Prepare the account3 for the sweep and make
         vm.startPrank(account3);
         bool forceFunding = true;
-        uint256 newOrderId = ob.sweepAndMake(forceFunding, makers, toMake);
+        uint256 newOrderId = ob.sweepAndMake(forceFunding, 0, makers, toMake);
         // the `toMake` order ID
         assertEq(newOrderId, 1);
         // We have a new bid coming from the `toMake`
@@ -459,7 +459,7 @@ contract OrderBookTest is BaseTest {
         // Prepare the account3 for the sweep and make
         vm.startPrank(account3);
         bool forceFunding = true;
-        uint256 newOrderId = ob.sweepAndMake(forceFunding, makers, toMake);
+        uint256 newOrderId = ob.sweepAndMake(forceFunding, 0, makers, toMake);
         // no new order ID since no `toMake`
         assertEq(newOrderId, 0);
         // The offer was fully matched and removed from the order book
@@ -501,7 +501,7 @@ contract OrderBookTest is BaseTest {
         collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 10 ether);
         // Expect revert with "Inconsistent component orders"
         vm.expectRevert("Inconsistent component orders");
-        ob.sweepAndMake(forceFunding, makers, toMake);
+        ob.sweepAndMake(forceFunding, 0, makers, toMake);
     }
 
     /**
@@ -519,7 +519,7 @@ contract OrderBookTest is BaseTest {
         bool forceFunding = true;
         // Expect revert with "Inconsistent order"
         vm.expectRevert("Inconsistent order");
-        ob.sweepAndMake(forceFunding, makers, toMake);
+        ob.sweepAndMake(forceFunding, 0, makers, toMake);
     }
 
     /**
@@ -537,7 +537,7 @@ contract OrderBookTest is BaseTest {
         bool forceFunding = false; // forceFunding must be false for sell orders
         // Expect revert with "Inconsistent order"
         vm.expectRevert("Inconsistent order");
-        ob.sweepAndMake(forceFunding, makers, toMake);
+        ob.sweepAndMake(forceFunding, 0, makers, toMake);
     }
 
     /**
@@ -555,7 +555,7 @@ contract OrderBookTest is BaseTest {
         bool forceFunding = true; // forceFunding must be false for sell orders
         // Expect revert with "Cannot force funding for sell orders"
         vm.expectRevert("Cannot force funding for sell orders");
-        ob.sweepAndMake(forceFunding, makers, toMake);
+        ob.sweepAndMake(forceFunding, 0, makers, toMake);
     }
 
     /**

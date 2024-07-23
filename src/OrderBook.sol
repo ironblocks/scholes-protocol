@@ -108,27 +108,37 @@ contract OrderBook is IOrderBook, ERC1155Holder {
     // as well as the amounts are sufficient.
     // If forceFunding is true, the taker will be forced to collateralize the order with base collateral
     // directly from the caller's address and regardless of previous collateralization.
-    function sweepAndMake(bool forceFunding, TTakerEntry[] memory makers, TMakerEntry memory toMake) external returns (uint256 id) {
+    function sweepAndMake(bool forceFunding, uint256 underlyingDepositRatio, TTakerEntry[] memory makers, TMakerEntry memory toMake) external returns (uint256 id) {
         bool isBuy  = makers.length > 0 ? makers[0].amount > 0 : toMake.amount > 0;
         require(isBuy ? toMake.amount >= 0 : toMake.amount <= 0, "Inconsistent order");
         require(isBuy || !forceFunding, "Cannot force funding for sell orders");
         // Take
         if (forceFunding /* && isBuy */) { // Collateralize with base collateral
             // Calculate funding
-            uint256 toDeposit = 0;
+            uint256 toDepositBase = 0;
             for (uint256 index = 0; index < makers.length; index++) {
-                toDeposit += scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption(uint256(makers[index].amount) * (1 ether + TAKER_FEE) / 1 ether, makers[index].price);
+                toDepositBase += scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption(uint256(makers[index].amount) * (1 ether + TAKER_FEE) / 1 ether, makers[index].price);
             }
-            toDeposit += scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption(uint256(toMake.amount) * (1 ether + MAKER_FEE) / 1 ether, toMake.price);
+            toDepositBase += scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption(uint256(toMake.amount) * (1 ether + MAKER_FEE) / 1 ether, toMake.price);
+            uint256 toDepositUnderlying = toDepositBase * underlyingDepositRatio / 1 ether;
+            toDepositBase -= toDepositUnderlying;
+            toDepositUnderlying = scholesOptions.spotPriceOracle(longOptionId).toSpot(toDepositUnderlying);
             // To avoid separate authorization for each transfer, we deposit base collateral to this contract and then transfer it to the caller
             { // Safe ERC20 transfer - take the deposit from the caller
                 // bytes4(keccak256(bytes('transferFrom(address,address,uint256)')));
-                (bool success, bytes memory data) = address(scholesOptions.getBaseToken(longOptionId)).call(abi.encodeWithSelector(0x23b872dd, msg.sender, address(this), toDeposit));
+                (bool success, bytes memory data) = address(scholesOptions.getBaseToken(longOptionId)).call(abi.encodeWithSelector(0x23b872dd, msg.sender, address(this), toDepositBase));
                 require(success && (data.length == 0 || abi.decode(data, (bool))), "Transfer failed");
             }
-            scholesOptions.getBaseToken(longOptionId).approve(address(scholesOptions.collaterals()), toDeposit); // Approve the deposit into the collateral contract
-            scholesOptions.collaterals().deposit(longOptionId, toDeposit, 0); // Deposit the base collateral into the collateral contract
-            scholesOptions.collaterals().safeTransferFrom(address(this), msg.sender, scholesOptions.collaterals().getId(uint256(longOptionId), true), toDeposit, ""); // Transfer the base collateral to the caller
+            { // Safe ERC20 transfer - take the deposit from the caller
+                // bytes4(keccak256(bytes('transferFrom(address,address,uint256)')));
+                (bool success, bytes memory data) = address(scholesOptions.getUnderlyingToken(longOptionId)).call(abi.encodeWithSelector(0x23b872dd, msg.sender, address(this), toDepositUnderlying));
+                require(success && (data.length == 0 || abi.decode(data, (bool))), "Transfer failed");
+            }
+            scholesOptions.getBaseToken(longOptionId).approve(address(scholesOptions.collaterals()), toDepositBase); // Approve the deposit into the collateral contract
+            scholesOptions.getUnderlyingToken(longOptionId).approve(address(scholesOptions.collaterals()), toDepositUnderlying); // Approve the deposit into the collateral contract
+            scholesOptions.collaterals().deposit(longOptionId, toDepositBase, toDepositUnderlying); // Deposit the base collateral into the collateral contract
+            scholesOptions.collaterals().safeTransferFrom(address(this), msg.sender, scholesOptions.collaterals().getId(uint256(longOptionId), true), toDepositBase, ""); // Transfer the base collateral to the caller
+            scholesOptions.collaterals().safeTransferFrom(address(this), msg.sender, scholesOptions.collaterals().getId(uint256(longOptionId), false), toDepositUnderlying, ""); // Transfer the base collateral to the caller
         }
         for (uint256 index = 0; index < makers.length; index++) {
             require(isBuy ? makers[index].amount > 0 : makers[index].amount < 0, "Inconsistent component orders");
