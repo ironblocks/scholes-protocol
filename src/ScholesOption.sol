@@ -252,15 +252,16 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
     /// @param _holders List of holder addresses to act as counterparties when American Options are settled
     /// @param amounts List of amounts to be settled for each of the above _holders
     /// @notice _holders and amounts are ignored for European Options or American Options that are exercised/settled after expiration
-    function exercise(uint256 id, uint256 amount, bool toUnderlying, address[] memory _holders, uint256[] memory amounts) external {
+    function exercise(address holder, uint256 id, uint256 amount, bool toUnderlying, address[] memory _holders, uint256[] memory amounts) public {
+        require(isAuthorizedExchange(id, msg.sender) || msg.sender == holder, "Unauthorized");
         require(options[id].isAmerican || timeOracle.getTime() > options[id].expiration, "Not elligible");
         require(options[id].isLong, "Writer cannot exercise");
-        require(balanceOf(msg.sender, id) >= amount, "Insufficient holding");
-        if (amount == 0) amount = balanceOf(msg.sender, id);
+        require(balanceOf(holder, id) >= amount, "Insufficient holding");
+        if (amount == 0) amount = balanceOf(holder, id);
         if (options[id].isAmerican && options[id].expiration <= timeOracle.getTime()) {
             // ISpotPriceOracle oracle = spotPriceOracle(id);
             // Allow OTM exercise: require(options[id].isCall ? oracle.getPrice() >= options[id].strike : oracle.getPrice() <= options[id].strike, "OTM");
-            exercise(id, amount, true, toUnderlying); // Exercise long option
+            exercise(holder, id, amount, true, toUnderlying); // Exercise long option
             // Settle short named counterparties
             uint256 totalSettled; // = 0
             uint256 shortId = getOpposite(id);
@@ -274,20 +275,20 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
             require(options[id].settlementPrice != 0, "No settlement price"); // Expired and settlement price set
             assert(timeOracle.getTime() > options[id].expiration); // BUG: Settlement price set before expiration
             if (options[id].isCall ? options[id].settlementPrice <= options[id].strike : options[id].settlementPrice >= options[id].strike) { // Expire worthless
-                _burn(msg.sender, id, balanceOf(msg.sender, id)); // BTW, the collateral stays untouched
+                _burn(holder, id, balanceOf(holder, id)); // BTW, the collateral stays untouched
             } else {
-                exercise(id, amount, false, toUnderlying);
+                exercise(holder, id, amount, false, toUnderlying);
             }
         }
     }
 
     // Should only be called by exercise(uint256 id, uint256 amount, bool toUnderlying, address[] memory _holders, uint256[] memory amounts)
     // No checking - already checked in exercise(uint256 id, uint256 amount, bool toUnderlying, address[] memory _holders, uint256[] memory amounts)
-    function exercise(uint256 id, uint256 amount, bool spotNotSettlement, bool toUnderlying) internal {
+    function exercise(address holder, uint256 id, uint256 amount, bool spotNotSettlement, bool toUnderlying) internal {
         assert(msg.sender != address(this)); // BUG: This must be an internal function
         uint256 baseId = collaterals.getId(id, true);
         uint256 underlyingId = collaterals.getId(id, false);
-        _burn(msg.sender, id, amount); // Burn option - no collateralization issues as it is always a long holding
+        _burn(holder, id, amount); // Burn option - no collateralization issues as it is always a long holding
         ISpotPriceOracle oracle = spotPriceOracle(id);
         uint256 convPrice;
         if (options[id].isCall) {
@@ -298,50 +299,51 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
                 uint256 underlyingAvailable = collaterals.totalSupply(underlyingId);
                 if (underlyingAvailable < underlyingToGet) {
                     // Get the rest in base
-                    collaterals.mintCollateral(msg.sender, baseId, oracle.toBase(underlyingToGet-underlyingAvailable, convPrice));
+                    collaterals.mintCollateral(holder, baseId, oracle.toBase(underlyingToGet-underlyingAvailable, convPrice));
                     underlyingToGet = underlyingAvailable;
                 }
-                collaterals.mintCollateral(msg.sender, underlyingId, underlyingToGet);
+                collaterals.mintCollateral(holder, underlyingId, underlyingToGet);
             } else {
                 uint256 baseToGet = oracle.toBase(amount, convPrice);
                 uint256 baseAvailable = collaterals.totalSupply(baseId);
                 if (baseAvailable < baseToGet) {
                     // Get the rest in underlying
-                    collaterals.mintCollateral(msg.sender, underlyingId, oracle.toSpot(baseToGet-baseAvailable, convPrice));
+                    collaterals.mintCollateral(holder, underlyingId, oracle.toSpot(baseToGet-baseAvailable, convPrice));
                     baseToGet = baseAvailable;
                 }
-                collaterals.mintCollateral(msg.sender, baseId, baseToGet);
+                collaterals.mintCollateral(holder, baseId, baseToGet);
             }
             // Now pay for it in Base
             convPrice = options[id].strike; // reduce stack space
-            collaterals.burnCollateral(msg.sender, baseId, oracle.toBase(amount, convPrice)); // Fails if insufficient: should never happen if maintenance collateralization rules are good
+            collaterals.burnCollateral(holder, baseId, oracle.toBase(amount, convPrice)); // Fails if insufficient: should never happen if maintenance collateralization rules are good
             // If not possible (the above reverts), the holder should convert collateral from underlying to base and retry - that's his responsibility
         } else { // is Put
             // Optimistically get paid for the option
             convPrice = options[id].strike;
-            collaterals.mintCollateral(msg.sender, baseId, oracle.toBase(amount, convPrice));
+            collaterals.mintCollateral(holder, baseId, oracle.toBase(amount, convPrice));
             // !!! Analyze if it's possible to end up with insufficient base to collect. Then the protocol has to step in and convert collateral from underlying to base.
             // Now give the option or countervalue
             uint256 underlyingToGive = amount;
-            uint256 underlyingIHave = collaterals.balanceOf(msg.sender, underlyingId);
+            uint256 underlyingIHave = collaterals.balanceOf(holder, underlyingId);
             if (underlyingToGive > underlyingIHave) {
                 convPrice = spotNotSettlement ? oracle.getPrice() : options[id].settlementPrice;
                 // Pay for insufficient underlying in base
-                collaterals.burnCollateral(msg.sender, baseId, oracle.toBase(underlyingToGive-underlyingIHave, convPrice));
+                collaterals.burnCollateral(holder, baseId, oracle.toBase(underlyingToGive-underlyingIHave, convPrice));
                 underlyingToGive = underlyingIHave;
             }
             // Give underlying
-            collaterals.burnCollateral(msg.sender, underlyingId, underlyingToGive);
+            collaterals.burnCollateral(holder, underlyingId, underlyingToGive);
         }
-        emit Exercise(id, msg.sender, amount, timeOracle.getTime(), toUnderlying);
+        emit Exercise(id, holder, amount, timeOracle.getTime(), toUnderlying);
     }
 
     // Should be called by the holder 
 
-    function settle(uint256 id) external {
+    function settle(address holder, uint256 id, bool toUnderlying) external {
+        require(isAuthorizedExchange(id, msg.sender) || msg.sender == holder, "Unauthorized");
         require(timeOracle.getTime() > options[id].expiration, "Not elligible");
         require(! options[id].isLong, "Only Writers can settle");
-        settle(msg.sender, id, balanceOf(msg.sender, id), false);
+        settle(holder, id, balanceOf(holder, id), toUnderlying);
     }
 
     // Should only be called by settle(id) or exercise(uint256 id, uint256 amount, bool toUnderlying, address[] memory _holders, uint256[] memory amounts)

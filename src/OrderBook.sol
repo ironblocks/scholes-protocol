@@ -258,4 +258,25 @@ contract OrderBook is IOrderBook, ERC1155Holder {
     function isMine(bool isBid, uint256 id) external view returns (bool) {
         return ((isBid && msg.sender == bids[id].owner) || (!isBid && msg.sender == offers[id].owner));
     }
+
+    function settle(bool toUnderlying) external {
+        require(scholesOptions.timeOracle().getTime() > scholesOptions.getExpiration(longOptionId), "Not expired");
+        if (scholesOptions.getSettlementPrice(longOptionId) == 0) {
+            scholesOptions.setSettlementPrice(longOptionId);
+        }
+        // Determine short/long
+        bool isLong = scholesOptions.balanceOf(msg.sender, longOptionId) > 0;
+        bool isShort = scholesOptions.balanceOf(msg.sender, scholesOptions.getOpposite(longOptionId)) > 0;
+        if (isLong) {
+            scholesOptions.exercise(msg.sender, longOptionId, 0, toUnderlying, new address[](0), new uint256[](0));
+        } else if (isShort) {
+            scholesOptions.settle(msg.sender, scholesOptions.getOpposite(longOptionId), toUnderlying);
+        } // else continue
+        // Withdraw collateral
+        IScholesCollateral collaterals = scholesOptions.collaterals();
+        (uint256 baseBalance, uint256 underlyingBalance) = collaterals.balances(msg.sender, longOptionId);
+        collaterals.proxySafeTransferFrom(longOptionId, msg.sender, address(this), collaterals.getId(longOptionId, true), baseBalance);
+        collaterals.proxySafeTransferFrom(longOptionId, msg.sender, address(this), collaterals.getId(longOptionId, false), underlyingBalance);
+        collaterals.withdrawTo(longOptionId, msg.sender, baseBalance, underlyingBalance);
+    }
 }

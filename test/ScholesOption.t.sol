@@ -61,7 +61,7 @@ contract ScholesOptionTest is BaseTest {
             /* uint256 beforeUnderlyingBlance = */
             collaterals.balanceOf(account2, collaterals.getId(longOptionId, false));
             uint256 beforeOptionBalance = options.balanceOf(account2, longOptionId);
-            options.exercise(longOptionId, 0, /*all*/ false, new address[](0), new uint256[](0)); // But there is no underlying - it should pay out in base
+            options.exercise(account2, longOptionId, 0, /*all*/ false, new address[](0), new uint256[](0)); // But there is no underlying - it should pay out in base
             uint256 afterBaseBalance = collaterals.balanceOf(account2, collaterals.getId(longOptionId, true));
             /* uint256 afterUnderlyingBlance = */
             collaterals.balanceOf(account2, collaterals.getId(longOptionId, false));
@@ -82,7 +82,7 @@ contract ScholesOptionTest is BaseTest {
         vm.startPrank(account1, account1);
         {
             uint256 beforeBalance = collaterals.balanceOf(account1, collaterals.getId(shortOptionId, true));
-            options.settle(shortOptionId);
+            options.settle(account1, shortOptionId, false);
             uint256 afterBalance = collaterals.balanceOf(account1, collaterals.getId(shortOptionId, true));
             assertEq(
                 afterBalance,

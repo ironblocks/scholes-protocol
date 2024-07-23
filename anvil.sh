@@ -1,3 +1,3 @@
-#!/bin/zsh
-source .env
-anvil --fork-url $FORK_RPC --mnemonic $PASSPHRASE
+#!/bin/sh
+. ./.env
+anvil --fork-url $FORK_RPC --mnemonic "$PASSPHRASE"

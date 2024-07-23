@@ -21,4 +21,5 @@ interface IOrderBook {
     function status(bool isBid, uint256 id) external view returns (int256 amount, uint256 price, uint256 expiration, address owner);
     function numOrders() external view returns (uint256 numBids, uint256 numOffers);
     function isMine(bool isBid, uint256 id) external view returns (bool);
+    function settle(bool toUnderlying) external;
 }
