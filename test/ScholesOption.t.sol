@@ -31,7 +31,7 @@ contract ScholesOptionTest is BaseTest {
         vm.startPrank(account1, account1);
         collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 0 ether);
 
-        // Fund account 2 with 10000 USDC + 10 ETH collateral
+        // Fund account 2 with 10000 USDC collateral
         vm.startPrank(account2, account2);
         collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 0 ether);
 

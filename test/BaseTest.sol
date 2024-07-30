@@ -35,7 +35,11 @@ contract BaseTest is Test {
     IERC20Metadata USDC;
     IERC20Metadata WETH;
     ISpotPriceOracle oracle;
+    ISpotPriceOracle oracleEthUsd;
     ITimeOracle mockTimeOracle;
+    TOptionParams optEthUsd;
+    uint256 INITIAL_USDC_BALANCE = 100000; // 100K
+    uint256 INITIAL_WETH_BALANCE = 100;
 
     function setUpBase() internal {
         console.log("Creator (owner): ", msg.sender);
@@ -43,16 +47,16 @@ contract BaseTest is Test {
         // Test USDC token
         USDC = IERC20Metadata(address(new MockERC20("Test USDC", "USDC", 6, 10 ** 6 * 10 ** 6))); // 1M total supply
         console.log("Test USDC address: ", address(USDC));
-        USDC.transfer(account1, 100000 * 10 ** USDC.decimals());
-        USDC.transfer(account2, 100000 * 10 ** USDC.decimals());
-        USDC.transfer(account3, 100000 * 10 ** USDC.decimals());
+        USDC.transfer(account1, INITIAL_USDC_BALANCE * 10 ** USDC.decimals());
+        USDC.transfer(account2, INITIAL_USDC_BALANCE * 10 ** USDC.decimals());
+        USDC.transfer(account3, INITIAL_USDC_BALANCE * 10 ** USDC.decimals());
 
         // Test WETH token
-        WETH = IERC20Metadata(address(new MockERC20("Test WETH", "WETH", 18, 10 ** 3 * 10 ** 18))); // 1M total supply
+        WETH = IERC20Metadata(address(new MockERC20("Test WETH", "WETH", 18, 10 ** 3 * 10 ** 18))); // 1K total supply
         console.log("Test WETH address: ", address(WETH));
-        WETH.transfer(account1, 100 * 10 ** WETH.decimals());
-        WETH.transfer(account2, 100 * 10 ** WETH.decimals());
-        WETH.transfer(account3, 100 * 10 ** WETH.decimals());
+        WETH.transfer(account1, INITIAL_WETH_BALANCE * 10 ** WETH.decimals());
+        WETH.transfer(account2, INITIAL_WETH_BALANCE * 10 ** WETH.decimals());
+        WETH.transfer(account3, INITIAL_WETH_BALANCE * 10 ** WETH.decimals());
 
         // SCH token
         IERC20Metadata SCH = IERC20Metadata(address(new MockERC20("SCH", "SCH", 18, 10 ** 6 * 10 ** 18))); // 1M total supply
@@ -96,11 +100,10 @@ contract BaseTest is Test {
         console.log("SCH/USDC SpotPriceOracle based on ETH/USD deployed, but always mocked: ", address(oracleSchUsd));
         oracleList.addOracle(oracleSchUsd);
 
-        ISpotPriceOracle oracleEthUsd = new SpotPriceOracle(AggregatorV3Interface(chainlinkEthUsd), WETH, USDC, false);
+        oracleEthUsd = new SpotPriceOracle(AggregatorV3Interface(chainlinkEthUsd), WETH, USDC, false);
         console.log("WETH/USDC SpotPriceOracle based on ETH/USD deployed: ", address(oracleEthUsd));
         oracleList.addOracle(oracleEthUsd);
 
-        TOptionParams memory optEthUsd;
         optEthUsd.underlying = WETH;
         optEthUsd.base = USDC;
         optEthUsd.strike = 2000 * 10 ** oracleEthUsd.decimals();
@@ -141,5 +144,34 @@ contract BaseTest is Test {
         WETH.approve(address(collaterals), type(uint256).max);
         USDC.approve(address(ob), type(uint256).max);
         WETH.approve(address(ob), type(uint256).max);
+    }
+
+    /**
+     * Helper function to assert the balance of a given ERC20 token for a specific account.
+     * This function checks if the account's balance of the specified token matches the expected balance.
+     *
+     * @param token The ERC20 token to check the balance of.
+     * @param _account The address of the account whose balance is to be checked.
+     * @param _expectedBalance The expected balance of the account.
+     */
+    function assertBalanceOf(IERC20Metadata token, address _account, uint256 _expectedBalance) internal {
+        uint256 balance = token.balanceOf(address(_account));
+        assertEq(balance, _expectedBalance, "Balance mismatch");
+    }
+
+    /**
+     * Helper function to assert collateral balances.
+     * Ensures that the given account has the expected base and underlying balances.
+     */
+    function assertCollateralsBalances(
+        IScholesCollateral _collaterals,
+        address _account,
+        uint256 _optionId,
+        uint256 _expectedBaseBalance,
+        uint256 _expectedUnderlyingBalance
+    ) internal {
+        (uint256 baseBalance, uint256 underlyingBalance) = _collaterals.balances(_account, _optionId);
+        assertEq(baseBalance, _expectedBaseBalance, "Base balance mismatch");
+        assertEq(underlyingBalance, _expectedUnderlyingBalance, "Underlying balance mismatch");
     }
 }
