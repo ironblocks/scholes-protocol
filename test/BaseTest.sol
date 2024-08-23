@@ -27,21 +27,19 @@ contract BaseTest is Test {
     address constant chainlinkEthUsd = 0x62CAe0FA2da220f43a51F86Db2EDb36DcA9A5A08; // on Arbitrum Görli
     // address constant chainlinkEthUsd = 0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612; // on Arbitrum One Mainnet
 
-    IOrderBook public ob;
+    IOrderBook public call2000OrderBook;
     IScholesOption public options;
     IScholesCollateral collaterals;
-    uint256 longOptionId;
-    uint256 shortOptionId;
     IERC20Metadata USDC;
     IERC20Metadata WETH;
-    ISpotPriceOracle oracle;
     ISpotPriceOracle oracleEthUsd;
     ITimeOracle mockTimeOracle;
-    TOptionParams optEthUsd;
+    TOptionParams optEthUsdCall2000;
+    uint256 oneHourExpiration;
     uint256 INITIAL_USDC_BALANCE = 100000; // 100K
     uint256 INITIAL_WETH_BALANCE = 100;
 
-    function setUpBase() internal {
+    function setUp() public virtual {
         console.log("Creator (owner): ", msg.sender);
 
         // Test USDC token
@@ -80,6 +78,7 @@ contract BaseTest is Test {
 
         mockTimeOracle = new MockTimeOracle();
         console.log("MockTimeOracle deployed: ", address(mockTimeOracle));
+        oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
 
         options.setFriendContracts(
             address(collaterals),
@@ -104,32 +103,36 @@ contract BaseTest is Test {
         console.log("WETH/USDC SpotPriceOracle based on ETH/USD deployed: ", address(oracleEthUsd));
         oracleList.addOracle(oracleEthUsd);
 
-        optEthUsd.underlying = WETH;
-        optEthUsd.base = USDC;
-        optEthUsd.strike = 2000 * 10 ** oracleEthUsd.decimals();
-        optEthUsd.expiration = block.timestamp + 30 days;
-        optEthUsd.isCall = true;
-        optEthUsd.isAmerican = false;
-        optEthUsd.isLong = true;
+        // Call
+        optEthUsdCall2000.underlying = WETH;
+        optEthUsdCall2000.base = USDC;
+        optEthUsdCall2000.strike = 2000 * 10 ** oracleEthUsd.decimals();
+        optEthUsdCall2000.expiration = block.timestamp + 30 days;
+        optEthUsdCall2000.isCall = true;
+        optEthUsdCall2000.isAmerican = false;
+        optEthUsdCall2000.isLong = true;
 
         // TCollateralRequirements memory colreq;
         // colreq.entryCollateralRequirement = 2 ether / 10; // 0.2
         // colreq.maintenanceCollateralRequirement = 1 ether / 10; // 0.1
 
-        obList.createScholesOptionPair(optEthUsd);
+        obList.createScholesOptionPair(optEthUsdCall2000);
 
-        ob = obList.getOrderBook(0); // The above WETH/USDC option
-        console.log("WETH/USDC order book: ", address(ob));
-        longOptionId = ob.longOptionId();
-        shortOptionId = options.getOpposite(longOptionId);
-        console.log("Long Option Id:", longOptionId);
-        options.setCollateralRequirements(shortOptionId, 0, 0, options.timeOracle().getTime(), ""); // No collateral requirements (this is dangerous!!!)
+        call2000OrderBook = obList.getOrderBook(0);
+        console.log("WETH/USDC order book: ", address(call2000OrderBook));
+        console.log("Long Option Id:", call2000OrderBook.longOptionId());
+        options.setCollateralRequirements(
+            options.getOpposite(call2000OrderBook.longOptionId()), 0, 0, options.timeOracle().getTime(), ""
+        ); // No collateral requirements (this is dangerous!!!)
         require(
-            keccak256("WETH") == keccak256(abi.encodePacked(options.getUnderlyingToken(longOptionId).symbol())),
+            keccak256("WETH")
+                == keccak256(abi.encodePacked(options.getUnderlyingToken(call2000OrderBook.longOptionId()).symbol())),
             "WETH symbol mismatch"
         ); // Check
-        require(optEthUsd.expiration == options.getExpiration(longOptionId), "Expiration mismatch"); // Double-check
-        oracle = options.spotPriceOracle(longOptionId);
+        require(
+            optEthUsdCall2000.expiration == options.getExpiration(call2000OrderBook.longOptionId()),
+            "Expiration mismatch"
+        ); // Double-check
 
         vm.startPrank(account1, account1);
         USDC.approve(address(collaterals), type(uint256).max);
@@ -142,8 +145,8 @@ contract BaseTest is Test {
         vm.startPrank(account3, account3);
         USDC.approve(address(collaterals), type(uint256).max);
         WETH.approve(address(collaterals), type(uint256).max);
-        USDC.approve(address(ob), type(uint256).max);
-        WETH.approve(address(ob), type(uint256).max);
+        USDC.approve(address(call2000OrderBook), type(uint256).max);
+        WETH.approve(address(call2000OrderBook), type(uint256).max);
     }
 
     /**

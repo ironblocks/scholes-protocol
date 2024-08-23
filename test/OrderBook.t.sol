@@ -32,10 +32,6 @@ contract OrderBookTest is BaseTest {
         uint256 indexed uniqid
     );
 
-    function setUp() public {
-        setUpBase();
-    }
-
     /**
      * Sets expectations for the "Make" event to be emitted with specified attributes.
      * Used to verify that the correct "Make" event is emitted during contract interaction.
@@ -74,7 +70,7 @@ contract OrderBookTest is BaseTest {
      * should alter the counts of bids or offers.
      */
     function assertOrderCounts(uint256 expectedBids, uint256 expectedOffers) private {
-        (uint256 numBids, uint256 numOffers) = ob.numOrders();
+        (uint256 numBids, uint256 numOffers) = call2000OrderBook.numOrders();
         assertEq(numBids, expectedBids, "Mismatch in expected number of bids.");
         assertEq(numOffers, expectedOffers, "Mismatch in expected number of offers.");
     }
@@ -88,7 +84,7 @@ contract OrderBookTest is BaseTest {
      */
     function getOrderBookItem(bool isBid, uint256 orderId) private view returns (OrderBook.TOrderBookItem memory) {
         (int256 amount, uint256 price, uint256 expiration, address owner, uint256 uniqid) =
-            isBid ? ob.bids(orderId) : ob.offers(orderId);
+            isBid ? call2000OrderBook.bids(orderId) : call2000OrderBook.offers(orderId);
         return OrderBook.TOrderBookItem({
             amount: amount,
             price: price,
@@ -151,7 +147,7 @@ contract OrderBookTest is BaseTest {
     function testDestroyNotExpired() public {
         // Try to destroy the order book before expiration
         vm.expectRevert("Not expired");
-        ob.destroy();
+        call2000OrderBook.destroy();
     }
 
     /**
@@ -160,20 +156,18 @@ contract OrderBookTest is BaseTest {
      */
     function testDestroyAfterExpiration() public {
         // Set up the order book with initial orders
-        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
-        // place a couple of orders
-        ob.make(-5 ether, 1 ether, oneHourExpiration);
-        ob.make(5 ether, 1 ether, oneHourExpiration);
+        call2000OrderBook.make(-5 ether, 1 ether, oneHourExpiration);
+        call2000OrderBook.make(5 ether, 1 ether, oneHourExpiration);
         // We now have 2 orders on the book
         assertOrderCounts(1, 1);
         // Move time forward to after the expiration of the option
-        vm.warp(options.getExpiration(longOptionId) + 1);
+        vm.warp(options.getExpiration(call2000OrderBook.longOptionId()) + 1);
         // Destroy the order book
-        ob.destroy();
+        call2000OrderBook.destroy();
         // Ensure the order book is empty
         assertOrderCounts(0, 0);
         // Destroy can be called multiple times with no issue
-        ob.destroy();
+        call2000OrderBook.destroy();
         // Ensure the order book remains empty
         assertOrderCounts(0, 0);
     }
@@ -191,10 +185,10 @@ contract OrderBookTest is BaseTest {
         int256 makeAmount = takeAmount * -1;
         uint256 expectedOrderId = 0;
         uint256 takeMakePrice = 2 ether;
-        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
         address maker = account1;
         address taker = account2;
-        oracle.setMockPrice(2000 * 10 ** oracle.decimals());
+        uint256 longOptionId = call2000OrderBook.longOptionId();
+        oracleEthUsd.setMockPrice(2000 * 10 ** oracleEthUsd.decimals());
         // order book should be empty at first
         assertOrderCounts(0, 0);
         // prepare and place the make order
@@ -202,7 +196,7 @@ contract OrderBookTest is BaseTest {
         collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 10 ether);
         // we need to add uniqid in the event. Uniqid is a nonce that gets updated with each order, see OrderBook.sol for more
         // expectNextCallMakeEvent(expectedOrderId, maker, makeAmount, takeMakePrice, oneHourExpiration);
-        uint256 orderId = ob.make(makeAmount, takeMakePrice, oneHourExpiration);
+        uint256 orderId = call2000OrderBook.make(makeAmount, takeMakePrice, oneHourExpiration);
         assertEq(orderId, expectedOrderId);
         // verify the order was placed and appears in the book
         bool isBid = takeAmount < 0;
@@ -215,7 +209,7 @@ contract OrderBookTest is BaseTest {
         collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 10 ether);
         // we need to add uniqid in the event. Uniqid is a nonce that gets updated with each order, see OrderBook.sol for more
         // expectNextCallTakeEvent(expectedOrderId, maker, taker, takeAmount);
-        ob.take(orderId, takeAmount, takeMakePrice);
+        call2000OrderBook.take(orderId, takeAmount, takeMakePrice);
         // order book should be empty again
         assertOrderCounts(0, 0);
     }
@@ -250,10 +244,10 @@ contract OrderBookTest is BaseTest {
         uint256 orderId = 0;
         bool isBid = true;
         vm.expectRevert(stdError.indexOOBError);
-        ob.cancel(isBid, orderId);
+        call2000OrderBook.cancel(isBid, orderId);
         isBid = false;
         vm.expectRevert(stdError.indexOOBError);
-        ob.cancel(isBid, orderId);
+        call2000OrderBook.cancel(isBid, orderId);
     }
 
     /**
@@ -267,31 +261,30 @@ contract OrderBookTest is BaseTest {
         assertOrderCounts(0, 0);
         // Add a bid and an offer
         vm.startPrank(owner);
-        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
-        uint256 bidOrderId = ob.make(1 ether, 1 ether, oneHourExpiration);
+        uint256 bidOrderId = call2000OrderBook.make(1 ether, 1 ether, oneHourExpiration);
         bool isBid = true;
-        bool isMine = ob.isMine(isBid, bidOrderId);
+        bool isMine = call2000OrderBook.isMine(isBid, bidOrderId);
         assertEq(isMine, true);
-        uint256 offerOrderId = ob.make(-1 ether, 1 ether, oneHourExpiration);
+        uint256 offerOrderId = call2000OrderBook.make(-1 ether, 1 ether, oneHourExpiration);
         isBid = false;
-        isMine = ob.isMine(isBid, offerOrderId);
+        isMine = call2000OrderBook.isMine(isBid, offerOrderId);
         assertEq(isMine, true);
         assertOrderCounts(1, 1);
         vm.startPrank(unauthorizedUser);
         // Try to cancel the bid with an unauthorized user
         isBid = true;
-        isMine = ob.isMine(isBid, bidOrderId);
+        isMine = call2000OrderBook.isMine(isBid, bidOrderId);
         assertEq(isMine, false);
         vm.expectRevert("Unauthorized");
-        ob.cancel(isBid, bidOrderId);
+        call2000OrderBook.cancel(isBid, bidOrderId);
         // Ensure the orders are still present
         assertOrderCounts(1, 1);
         // Try to cancel the offer with an unauthorized user
         isBid = false;
-        isMine = ob.isMine(isBid, offerOrderId);
+        isMine = call2000OrderBook.isMine(isBid, offerOrderId);
         assertEq(isMine, false);
         vm.expectRevert("Unauthorized");
-        ob.cancel(isBid, offerOrderId);
+        call2000OrderBook.cancel(isBid, offerOrderId);
         // Ensure the orders are still present
         assertOrderCounts(1, 1);
     }
@@ -305,17 +298,16 @@ contract OrderBookTest is BaseTest {
         assertOrderCounts(0, 0);
         int256 makeAmount = 1 ether;
         uint256 makePrice = 1 ether;
-        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
-        uint256 bidOrderId = ob.make(makeAmount, makePrice, oneHourExpiration);
+        uint256 bidOrderId = call2000OrderBook.make(makeAmount, makePrice, oneHourExpiration);
         assertOrderCounts(1, 0);
         makeAmount = -1 ether;
-        uint256 offerOrderId = ob.make(makeAmount, makePrice, oneHourExpiration);
+        uint256 offerOrderId = call2000OrderBook.make(makeAmount, makePrice, oneHourExpiration);
         assertOrderCounts(1, 1);
         bool isBid = true;
-        ob.cancel(isBid, bidOrderId);
+        call2000OrderBook.cancel(isBid, bidOrderId);
         assertOrderCounts(0, 1);
         isBid = false;
-        ob.cancel(isBid, offerOrderId);
+        call2000OrderBook.cancel(isBid, offerOrderId);
         assertOrderCounts(0, 0);
     }
 
@@ -327,21 +319,20 @@ contract OrderBookTest is BaseTest {
         // Order book should be empty at first
         assertOrderCounts(0, 0);
         // Add multiple bids
-        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
-        uint256 bidOrderId1 = ob.make(1 ether, 1 ether, oneHourExpiration);
-        uint256 bidOrderId2 = ob.make(2 ether, 2 ether, oneHourExpiration);
-        uint256 bidOrderId3 = ob.make(3 ether, 3 ether, oneHourExpiration);
+        uint256 bidOrderId1 = call2000OrderBook.make(1 ether, 1 ether, oneHourExpiration);
+        uint256 bidOrderId2 = call2000OrderBook.make(2 ether, 2 ether, oneHourExpiration);
+        uint256 bidOrderId3 = call2000OrderBook.make(3 ether, 3 ether, oneHourExpiration);
         assertEq(bidOrderId3, 2);
         assertOrderCounts(3, 0);
         // Cancel the second bid
         bool isBid = true;
-        ob.cancel(isBid, bidOrderId2);
+        call2000OrderBook.cancel(isBid, bidOrderId2);
         assertOrderCounts(2, 0);
         // Check the remaining orders
-        (int256 amount1,,,) = ob.status(isBid, bidOrderId1);
+        (int256 amount1,,,) = call2000OrderBook.status(isBid, bidOrderId1);
         assertEq(amount1, 1 ether);
         // The 3rd order now has the bidOrderId2
-        (int256 amount2,,,) = ob.status(isBid, bidOrderId2);
+        (int256 amount2,,,) = call2000OrderBook.status(isBid, bidOrderId2);
         assertEq(amount2, 3 ether);
     }
 
@@ -353,21 +344,20 @@ contract OrderBookTest is BaseTest {
         // Order book should be empty at first
         assertOrderCounts(0, 0);
         // Add multiple offers
-        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
-        uint256 offerOrderId1 = ob.make(-1 ether, 1 ether, oneHourExpiration);
-        uint256 offerOrderId2 = ob.make(-2 ether, 2 ether, oneHourExpiration);
-        uint256 offerOrderId3 = ob.make(-3 ether, 3 ether, oneHourExpiration);
+        uint256 offerOrderId1 = call2000OrderBook.make(-1 ether, 1 ether, oneHourExpiration);
+        uint256 offerOrderId2 = call2000OrderBook.make(-2 ether, 2 ether, oneHourExpiration);
+        uint256 offerOrderId3 = call2000OrderBook.make(-3 ether, 3 ether, oneHourExpiration);
         assertEq(offerOrderId3, 2);
         assertOrderCounts(0, 3);
         // Cancel the second offer
         bool isBid = false;
-        ob.cancel(isBid, offerOrderId2);
+        call2000OrderBook.cancel(isBid, offerOrderId2);
         assertOrderCounts(0, 2);
         // Check the remaining orders
-        (int256 amount1,,,) = ob.status(isBid, offerOrderId1);
+        (int256 amount1,,,) = call2000OrderBook.status(isBid, offerOrderId1);
         assertEq(amount1, -1 ether);
         // The 3rd order now has the offerOrderId2
-        (int256 amount2,,,) = ob.status(isBid, offerOrderId2);
+        (int256 amount2,,,) = call2000OrderBook.status(isBid, offerOrderId2);
         assertEq(amount2, -3 ether);
     }
 
@@ -379,15 +369,14 @@ contract OrderBookTest is BaseTest {
     function testSweepAndMake() public {
         // Order book should be empty at first
         assertOrderCounts(0, 0);
-        oracle.setMockPrice(2000 * 10 ** oracle.decimals());
-        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        oracleEthUsd.setMockPrice(2000 * 10 ** oracleEthUsd.decimals());
         uint256 twoHourExpiration = mockTimeOracle.getTime() + 2 hours;
         // Account1 makes an offer
         vm.startPrank(account1);
-        uint256 offerId = ob.make(-5 ether, 1 ether, oneHourExpiration);
+        uint256 offerId = call2000OrderBook.make(-5 ether, 1 ether, oneHourExpiration);
         // Account2 places a bid
         vm.startPrank(account2);
-        uint256 bidId = ob.make(5 ether, 1 ether, oneHourExpiration);
+        uint256 bidId = call2000OrderBook.make(5 ether, 1 ether, oneHourExpiration);
         // We now have 2 orders on the book
         assertOrderCounts(1, 1);
         // Prepare the sweep and make to partially take from offerId
@@ -397,7 +386,7 @@ contract OrderBookTest is BaseTest {
         // Prepare the account3 for the sweep and make
         vm.startPrank(account3);
         bool forceFunding = true;
-        uint256 newOrderId = ob.sweepAndMake(forceFunding, 0, makers, toMake);
+        uint256 newOrderId = call2000OrderBook.sweepAndMake(forceFunding, 0, makers, toMake);
         // the `toMake` order ID
         assertEq(newOrderId, 1);
         // We have a new bid coming from the `toMake`
@@ -441,15 +430,14 @@ contract OrderBookTest is BaseTest {
     function testSweepAndMakeNoMake() public {
         // Order book should be empty at first
         assertOrderCounts(0, 0);
-        oracle.setMockPrice(2000 * 10 ** oracle.decimals());
-        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        oracleEthUsd.setMockPrice(2000 * 10 ** oracleEthUsd.decimals());
         uint256 twoHourExpiration = mockTimeOracle.getTime() + 2 hours;
         // Account1 makes an offer
         vm.startPrank(account1);
-        uint256 offerId = ob.make(-5 ether, 1 ether, oneHourExpiration);
+        uint256 offerId = call2000OrderBook.make(-5 ether, 1 ether, oneHourExpiration);
         // Account2 places a bid
         vm.startPrank(account2);
-        uint256 bidId = ob.make(5 ether, 1 ether, oneHourExpiration);
+        uint256 bidId = call2000OrderBook.make(5 ether, 1 ether, oneHourExpiration);
         // We now have 2 orders on the book
         assertOrderCounts(1, 1);
         // Prepare the sweep and make to fully take from offerId
@@ -459,7 +447,7 @@ contract OrderBookTest is BaseTest {
         // Prepare the account3 for the sweep and make
         vm.startPrank(account3);
         bool forceFunding = true;
-        uint256 newOrderId = ob.sweepAndMake(forceFunding, 0, makers, toMake);
+        uint256 newOrderId = call2000OrderBook.sweepAndMake(forceFunding, 0, makers, toMake);
         // no new order ID since no `toMake`
         assertEq(newOrderId, 0);
         // The offer was fully matched and removed from the order book
@@ -481,14 +469,15 @@ contract OrderBookTest is BaseTest {
      * This should revert with the message "Inconsistent component orders".
      */
     function testSweepAndMakeInconsistentComponentOrders() public {
-        oracle.setMockPrice(2000 * 10 ** oracle.decimals());
+        oracleEthUsd.setMockPrice(2000 * 10 ** oracleEthUsd.decimals());
         uint256 expiration = mockTimeOracle.getTime() + 1 hours;
+        uint256 longOptionId = call2000OrderBook.longOptionId();
         // Account1 makes an offer
         vm.startPrank(account1);
-        uint256 offerId = ob.make(-5 ether, 1 ether, expiration);
+        uint256 offerId = call2000OrderBook.make(-5 ether, 1 ether, expiration);
         // Account2 places a bid
         vm.startPrank(account2);
-        uint256 bidId = ob.make(5 ether, 1 ether, expiration);
+        uint256 bidId = call2000OrderBook.make(5 ether, 1 ether, expiration);
         // We now have 2 orders on the book
         assertOrderCounts(1, 1);
         // Prepare the sweep and make with inconsistent maker amounts
@@ -501,7 +490,7 @@ contract OrderBookTest is BaseTest {
         collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 10 ether);
         // Expect revert with "Inconsistent component orders"
         vm.expectRevert("Inconsistent component orders");
-        ob.sweepAndMake(forceFunding, 0, makers, toMake);
+        call2000OrderBook.sweepAndMake(forceFunding, 0, makers, toMake);
     }
 
     /**
@@ -519,7 +508,7 @@ contract OrderBookTest is BaseTest {
         bool forceFunding = true;
         // Expect revert with "Inconsistent order"
         vm.expectRevert("Inconsistent order");
-        ob.sweepAndMake(forceFunding, 0, makers, toMake);
+        call2000OrderBook.sweepAndMake(forceFunding, 0, makers, toMake);
     }
 
     /**
@@ -537,7 +526,7 @@ contract OrderBookTest is BaseTest {
         bool forceFunding = false; // forceFunding must be false for sell orders
         // Expect revert with "Inconsistent order"
         vm.expectRevert("Inconsistent order");
-        ob.sweepAndMake(forceFunding, 0, makers, toMake);
+        call2000OrderBook.sweepAndMake(forceFunding, 0, makers, toMake);
     }
 
     /**
@@ -555,7 +544,7 @@ contract OrderBookTest is BaseTest {
         bool forceFunding = true; // forceFunding must be false for sell orders
         // Expect revert with "Cannot force funding for sell orders"
         vm.expectRevert("Cannot force funding for sell orders");
-        ob.sweepAndMake(forceFunding, 0, makers, toMake);
+        call2000OrderBook.sweepAndMake(forceFunding, 0, makers, toMake);
     }
 
     /**
@@ -564,18 +553,19 @@ contract OrderBookTest is BaseTest {
      */
     function testVanishValid() public {
         // Set up the order book with initial orders
-        oracle.setMockPrice(2000 * 10 ** oracle.decimals());
+        oracleEthUsd.setMockPrice(2000 * 10 ** oracleEthUsd.decimals());
+        uint256 longOptionId = call2000OrderBook.longOptionId();
+        uint256 shortOptionId = options.getOpposite(longOptionId);
         uint256 collateralsId = collaterals.getId(shortOptionId, true);
-        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
         // Account1 makes an offer
         vm.startPrank(account1);
         collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 10 ether);
-        ob.make(-1 ether, 1 ether, oneHourExpiration);
+        call2000OrderBook.make(-1 ether, 1 ether, oneHourExpiration);
         // Account2 places bids
         vm.startPrank(account2);
         collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 10 ether);
-        uint256 bidId1 = ob.make(2 ether, 1 ether, oneHourExpiration);
-        uint256 bidId2 = ob.make(3 ether, 1 ether, oneHourExpiration);
+        uint256 bidId1 = call2000OrderBook.make(2 ether, 1 ether, oneHourExpiration);
+        uint256 bidId2 = call2000OrderBook.make(3 ether, 1 ether, oneHourExpiration);
         // We now have 3 orders on the book
         assertOrderCounts(2, 1);
         // Check the balances before
@@ -589,7 +579,7 @@ contract OrderBookTest is BaseTest {
         makers[1] = TTakerEntry(bidId1, -2 ether, 1 ether);
         // Execute the vanish operation
         vm.startPrank(account3);
-        ob.vanish(account3, makers, 5 ether);
+        call2000OrderBook.vanish(account3, makers, 5 ether);
         // The two bids were matched
         assertOrderCounts(0, 1);
         // The account3 balances increased
@@ -605,13 +595,13 @@ contract OrderBookTest is BaseTest {
      */
     function testVanishOversold() public {
         // Set up the order book with initial orders
-        oracle.setMockPrice(2000 * 10 ** oracle.decimals());
-        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        oracleEthUsd.setMockPrice(2000 * 10 ** oracleEthUsd.decimals());
+        uint256 longOptionId = call2000OrderBook.longOptionId();
         // Account1 places bids
         vm.startPrank(account1);
         collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 10 ether);
-        uint256 bidId1 = ob.make(2 ether, 1 ether, oneHourExpiration);
-        uint256 bidId2 = ob.make(3 ether, 1 ether, oneHourExpiration);
+        uint256 bidId1 = call2000OrderBook.make(2 ether, 1 ether, oneHourExpiration);
+        uint256 bidId2 = call2000OrderBook.make(3 ether, 1 ether, oneHourExpiration);
         // We now have 2 bids on the book
         assertOrderCounts(2, 0);
         // Prepare the vanish operation
@@ -621,7 +611,7 @@ contract OrderBookTest is BaseTest {
         // Execute the vanish operation expecting a revert
         vm.startPrank(account2);
         vm.expectRevert("Vanish oversold");
-        ob.vanish(account2, makers, 4 ether);
+        call2000OrderBook.vanish(account2, makers, 4 ether);
     }
 
     /**
@@ -629,13 +619,13 @@ contract OrderBookTest is BaseTest {
      * This should revert with the message "Inconsistent component orders".
      */
     function testVanishInconsistentComponentOrders() public {
-        oracle.setMockPrice(2000 * 10 ** oracle.decimals());
-        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        oracleEthUsd.setMockPrice(2000 * 10 ** oracleEthUsd.decimals());
+        uint256 longOptionId = call2000OrderBook.longOptionId();
         // Account1 places bids
         vm.startPrank(account1);
         collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 10 ether);
-        uint256 bidId1 = ob.make(2 ether, 1 ether, oneHourExpiration);
-        uint256 bidId2 = ob.make(3 ether, 1 ether, oneHourExpiration);
+        uint256 bidId1 = call2000OrderBook.make(2 ether, 1 ether, oneHourExpiration);
+        uint256 bidId2 = call2000OrderBook.make(3 ether, 1 ether, oneHourExpiration);
         // We now have 2 bids on the book
         assertOrderCounts(2, 0);
         // Prepare the vanish operation with inconsistent maker amounts
@@ -645,7 +635,27 @@ contract OrderBookTest is BaseTest {
         // Execute the vanish operation expecting a revert
         vm.startPrank(account2);
         vm.expectRevert("Inconsistent component orders");
-        ob.vanish(account2, makers, 5 ether);
+        call2000OrderBook.vanish(account2, makers, 5 ether);
+    }
+}
+
+/**
+ * Contract for testing the settlement process of options within the OrderBook and ScholesOption contracts.
+ */
+contract OrderBookSettleTest is BaseTest {
+    // Initialize variables for the test
+    uint256 baseAmountDeposit;
+    uint256 underlyingAmountDeposit = 10 ether;
+    uint256 optionPrice = 2;
+    uint256 optionPriceUsdc;
+    uint256 optionPriceEth = optionPrice * 1 ether;
+    uint256 feeAdjustedOptionPriceUsdc;
+    int256 makeTakeAmount = 2;
+
+    function setUp() public override {
+        super.setUp();
+        baseAmountDeposit = 10000 * 10 ** USDC.decimals();
+        optionPriceUsdc = optionPrice * 10 ** USDC.decimals();
     }
 
     /**
@@ -657,21 +667,14 @@ contract OrderBookTest is BaseTest {
      */
     function testBuyAndSettleLongCallOption() public {
         // Initialize variables for the test
-        uint256 baseAmountDeposit = 10000 * 10 ** USDC.decimals();
-        uint256 underlyingAmountDeposit = 10 ether;
-        uint256 optionPrice = 2;
-        uint256 optionPriceUsdc = optionPrice * 10 ** USDC.decimals();
-        uint256 optionPriceEth = optionPrice * 1 ether;
-        // the option taker sells the option for slightly less after applying the fee
-        uint256 feeAdjustedOptionPriceUsdc =
-            (optionPriceUsdc * (1 ether - ob.TAKER_FEE()) / 1 ether);
-        int256 makeTakeAmount = 2;
-        uint256 strikePrice = optEthUsd.strike / (10 ** oracleEthUsd.decimals());
+        uint256 strikePrice = optEthUsdCall2000.strike / (10 ** oracleEthUsd.decimals());
         uint256 actualPrice = 2100;
-        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        uint256 longOptionId = call2000OrderBook.longOptionId();
+        // the option taker sells the option for slightly less after applying the fee
+        feeAdjustedOptionPriceUsdc = (optionPriceUsdc * (1 ether - call2000OrderBook.TAKER_FEE()) / 1 ether);
 
         // Set the initial mock price of the underlying asset (ETH)
-        oracle.setMockPrice(actualPrice * 10 ** oracle.decimals());
+        oracleEthUsd.setMockPrice(actualPrice * 10 ** oracleEthUsd.decimals());
 
         // Ensure account1 starts with zero collateral balances
         assertCollateralsBalances(collaterals, account1, longOptionId, 0, 0);
@@ -687,7 +690,7 @@ contract OrderBookTest is BaseTest {
         assertBalanceOf(WETH, account1, INITIAL_WETH_BALANCE * 10 ** WETH.decimals() - underlyingAmountDeposit);
 
         // Account1 places a bid to buy the long option
-        uint256 orderId = ob.make(makeTakeAmount * 1 ether, optionPriceEth, oneHourExpiration);
+        uint256 orderId = call2000OrderBook.make(makeTakeAmount * 1 ether, optionPriceEth, oneHourExpiration);
 
         // Ensure account2 starts with zero collateral balances
         assertCollateralsBalances(collaterals, account2, longOptionId, 0, 0);
@@ -698,7 +701,7 @@ contract OrderBookTest is BaseTest {
         vm.startPrank(account2, account2);
         collaterals.deposit(longOptionId, baseAmountDeposit, underlyingAmountDeposit);
         // Account2 takes account1's order and sells the option
-        ob.take(orderId, -makeTakeAmount * 1 ether, optionPriceEth);
+        call2000OrderBook.take(orderId, -makeTakeAmount * 1 ether, optionPriceEth);
 
         // Ensure collateral balances reflect the purchase of the option (premium) by account1
         assertCollateralsBalances(
@@ -721,10 +724,10 @@ contract OrderBookTest is BaseTest {
         vm.warp(options.getExpiration(longOptionId) + 1);
         // Set the settlement price
         options.setSettlementPrice(longOptionId);
-        assertEq(options.getSettlementPrice(longOptionId), actualPrice * 10 ** oracle.decimals());
+        assertEq(options.getSettlementPrice(longOptionId), actualPrice * 10 ** oracleEthUsd.decimals());
         // Account1 settles their position
         vm.startPrank(account1);
-        ob.settle(false);
+        call2000OrderBook.settle(false);
 
         // Check the balances after settlement to ensure all collateral is withdrawn for account1
         assertCollateralsBalances(collaterals, account1, longOptionId, 0, 0);
@@ -736,7 +739,7 @@ contract OrderBookTest is BaseTest {
             baseAmountDeposit + (uint256(makeTakeAmount) * feeAdjustedOptionPriceUsdc),
             underlyingAmountDeposit
         );
-        // Ensure account1's wallet USDC balance reflects the exercised options minus the option price
+        // Ensure account1's wallet USDC balance reflects the exercised option minus the option price
         assertBalanceOf(
             USDC,
             account1,
@@ -758,21 +761,14 @@ contract OrderBookTest is BaseTest {
      */
     function testSellAndSettleLongCallOption() public {
         // Initialize variables for the test
-        uint256 baseAmountDeposit = 10000 * 10 ** USDC.decimals();
-        uint256 underlyingAmountDeposit = 10 ether;
-        uint256 optionPrice = 3;
-        uint256 optionPriceUsdc = optionPrice * 10 ** USDC.decimals();
-        uint256 optionPriceEth = optionPrice * 1 ether;
-        // the option taker buys the option for slightly more after applying the fee
-        uint256 feeAdjustedOptionPriceUsdc =
-            (optionPriceUsdc * (1 ether + ob.TAKER_FEE()) / 1 ether);
-        int256 makeTakeAmount = 2;
-        uint256 strikePrice = optEthUsd.strike / (10 ** oracleEthUsd.decimals());
+        uint256 strikePrice = optEthUsdCall2000.strike / (10 ** oracleEthUsd.decimals());
         uint256 actualPrice = 1900;
-        uint256 oneHourExpiration = mockTimeOracle.getTime() + 1 hours;
+        uint256 longOptionId = call2000OrderBook.longOptionId();
+        // the option taker buys the option for slightly more after applying the fee
+        feeAdjustedOptionPriceUsdc = (optionPriceUsdc * (1 ether + call2000OrderBook.TAKER_FEE()) / 1 ether);
 
         // Set the mock price of the underlying asset (ETH) before placing the sell order
-        oracle.setMockPrice(actualPrice * 10 ** oracle.decimals());
+        oracleEthUsd.setMockPrice(actualPrice * 10 ** oracleEthUsd.decimals());
 
         // Ensure account1 starts with zero collateral balances
         assertCollateralsBalances(collaterals, account1, longOptionId, 0, 0);
@@ -788,7 +784,7 @@ contract OrderBookTest is BaseTest {
         assertBalanceOf(WETH, account1, INITIAL_WETH_BALANCE * 10 ** WETH.decimals() - underlyingAmountDeposit);
 
         // Account1 places an offer to sell the long option
-        uint256 orderId = ob.make(-makeTakeAmount * 1 ether, optionPriceEth, oneHourExpiration);
+        uint256 orderId = call2000OrderBook.make(-makeTakeAmount * 1 ether, optionPriceEth, oneHourExpiration);
 
         // Ensure account2 starts with zero collateral balances
         assertCollateralsBalances(collaterals, account2, longOptionId, 0, 0);
@@ -799,7 +795,7 @@ contract OrderBookTest is BaseTest {
         vm.startPrank(account2, account2);
         collaterals.deposit(longOptionId, baseAmountDeposit, underlyingAmountDeposit);
         // Account2 takes account1's sell order and buys the option
-        ob.take(orderId, makeTakeAmount * 1 ether, optionPriceEth);
+        call2000OrderBook.take(orderId, makeTakeAmount * 1 ether, optionPriceEth);
 
         // Ensure collateral balances reflect the sale of the option by account1
         assertCollateralsBalances(
@@ -824,9 +820,9 @@ contract OrderBookTest is BaseTest {
         assertEq(options.getSettlementPrice(longOptionId), 0);
         // Account1 settles their position
         vm.startPrank(account1);
-        ob.settle(false);
+        call2000OrderBook.settle(false);
         // settlement price was updated to match with the actual price
-        assertEq(options.getSettlementPrice(longOptionId), actualPrice * 10 ** oracle.decimals());
+        assertEq(options.getSettlementPrice(longOptionId), actualPrice * 10 ** oracleEthUsd.decimals());
 
         // Check the balances after settlement to ensure all collateral is withdrawn for account1
         assertCollateralsBalances(collaterals, account1, longOptionId, 0, 0);

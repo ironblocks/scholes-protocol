@@ -19,12 +19,10 @@ import "../src/MockTimeOracle.sol";
 import "../src/interfaces/ISpotPriceOracle.sol";
 
 contract ScholesLiquidatorTest is BaseTest {
-    function setUp() public {
-        setUpBase();
-    }
-
     function testLiquidate() public {
-        oracle.setMockPrice(1700 * 10 ** oracle.decimals());
+        oracleEthUsd.setMockPrice(1700 * 10 ** oracleEthUsd.decimals());
+        uint256 longOptionId = call2000OrderBook.longOptionId();
+        uint256 shortOptionId = options.getOpposite(longOptionId);
 
         // Fund account 1 with 400 USDC collateral
         vm.startPrank(account1, account1);
@@ -36,17 +34,17 @@ contract ScholesLiquidatorTest is BaseTest {
 
         // Make an offer to sell 1 option at 2 USDC
         vm.startPrank(account1, account1);
-        uint256 orderId = ob.make(-1 ether, 2 ether, mockTimeOracle.getTime() + 60 * 60 /* 1 hour */ );
+        uint256 orderId = call2000OrderBook.make(-1 ether, 2 ether, mockTimeOracle.getTime() + 60 * 60 /* 1 hour */ );
 
         // Take the offer to buy 1 option at 2 USDC
         vm.startPrank(account2, account2);
-        ob.take(orderId, 1 ether, 2 ether);
+        call2000OrderBook.take(orderId, 1 ether, 2 ether);
 
         // Check collateralization of account1 - should be OK
         assert(options.isCollateralSufficient(account1, shortOptionId, false));
 
         // Mock price of WETH/USDC to 3000
-        // Price does not matter: oracle.setMockPrice(3000 * 10 ** oracle.decimals());
+        // Price does not matter: oracleEthUsd.setMockPrice(3000 * 10 ** oracleEthUsd.decimals());
         options.setCollateralRequirements(
             shortOptionId, 0, /*entry*/ 500 * 10 ** USDC.decimals(), /*maintenance*/ options.timeOracle().getTime(), ""
         );
