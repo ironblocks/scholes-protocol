@@ -12,4 +12,5 @@ struct TOptionParams {
     bool isAmerican;
     bool isLong;
     uint256 settlementPrice;
+    bool isSingleCollateral;
 }
