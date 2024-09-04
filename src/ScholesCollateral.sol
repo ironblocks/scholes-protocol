@@ -80,6 +80,8 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
     }
 
     function deposit(uint256 optionId, uint256 baseAmount, uint256 underlyingAmount) external {
+        require(!options.isSingleCollateral(optionId) ||
+                (options.isCall(optionId) ? baseAmount == 0 : underlyingAmount == 0), "Not single collateral");
         safeTransferERC20From(address(options.getBaseToken(optionId)), msg.sender, address(this), baseAmount); // Can revert
         safeTransferERC20From(address(options.getUnderlyingToken(optionId)), msg.sender, address(this), underlyingAmount); // Can revert
         uint256[] memory ids = new uint256[](2);

@@ -34,6 +34,7 @@ interface IScholesOption is IERC1155 {
     function getHolder(uint256 id, uint256 index) external view returns (address);
     function isCall(uint256 id) external view returns (bool);
     function isLong(uint256 id) external view returns (bool);
+    function isSingleCollateral(uint256 id) external view returns (bool);
     function isAmerican(uint256 id) external view returns (bool);
     function getStrike(uint256 id) external view returns (uint256);
     function getExpiration(uint256 id) external view returns (uint256);

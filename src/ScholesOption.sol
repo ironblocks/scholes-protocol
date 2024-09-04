@@ -140,6 +140,10 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         return options[id].isLong;
     }
 
+    function isSingleCollateral(uint256 id) public view returns (bool) {
+        return options[id].isSingleCollateral;
+    }
+
     function isAmerican(uint256 id) public view returns (bool) {
         return options[id].isAmerican;
     }
