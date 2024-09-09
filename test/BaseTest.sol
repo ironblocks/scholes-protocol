@@ -28,6 +28,7 @@ contract BaseTest is Test {
     // address constant chainlinkEthUsd = 0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612; // on Arbitrum One Mainnet
 
     IOrderBook public call2000OrderBook;
+    IOrderBook public put2000OrderBook;
     IScholesOption public options;
     IScholesCollateral collaterals;
     IERC20Metadata USDC;
@@ -35,6 +36,7 @@ contract BaseTest is Test {
     ISpotPriceOracle oracleEthUsd;
     ITimeOracle mockTimeOracle;
     TOptionParams optEthUsdCall2000;
+    TOptionParams optEthUsdPut2000;
     uint256 oneHourExpiration;
     uint256 INITIAL_USDC_BALANCE = 100000; // 100K
     uint256 INITIAL_WETH_BALANCE = 100;
@@ -112,17 +114,31 @@ contract BaseTest is Test {
         optEthUsdCall2000.isAmerican = false;
         optEthUsdCall2000.isLong = true;
 
+        // Put
+        optEthUsdPut2000.underlying = WETH;
+        optEthUsdPut2000.base = USDC;
+        optEthUsdPut2000.strike = 2000 * 10 ** oracleEthUsd.decimals();
+        optEthUsdPut2000.expiration = block.timestamp + 20 days;
+        optEthUsdPut2000.isCall = false;
+        optEthUsdPut2000.isAmerican = false;
+        optEthUsdPut2000.isLong = true;
+
         // TCollateralRequirements memory colreq;
         // colreq.entryCollateralRequirement = 2 ether / 10; // 0.2
         // colreq.maintenanceCollateralRequirement = 1 ether / 10; // 0.1
 
         obList.createScholesOptionPair(optEthUsdCall2000);
+        obList.createScholesOptionPair(optEthUsdPut2000);
 
         call2000OrderBook = obList.getOrderBook(0);
+        put2000OrderBook = obList.getOrderBook(1);
         console.log("WETH/USDC order book: ", address(call2000OrderBook));
         console.log("Long Option Id:", call2000OrderBook.longOptionId());
         options.setCollateralRequirements(
             options.getOpposite(call2000OrderBook.longOptionId()), 0, 0, options.timeOracle().getTime(), ""
+        ); // No collateral requirements (this is dangerous!!!)
+        options.setCollateralRequirements(
+            options.getOpposite(put2000OrderBook.longOptionId()), 0, 0, options.timeOracle().getTime(), ""
         ); // No collateral requirements (this is dangerous!!!)
         require(
             keccak256("WETH")
@@ -132,6 +148,9 @@ contract BaseTest is Test {
         require(
             optEthUsdCall2000.expiration == options.getExpiration(call2000OrderBook.longOptionId()),
             "Expiration mismatch"
+        ); // Double-check
+        require(
+            optEthUsdPut2000.expiration == options.getExpiration(put2000OrderBook.longOptionId()), "Expiration mismatch"
         ); // Double-check
 
         vm.startPrank(account1, account1);
