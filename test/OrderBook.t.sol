@@ -664,7 +664,7 @@ contract OrderBookTest is BaseTest {
         uint256 optionPriceEth = optionPrice * 1 ether;
         // the option taker sells the option for slightly less after applying the fee
         uint256 feeAdjustedOptionPriceUsdc =
-            (optionPriceUsdc * (1 ether - OrderBook(address(ob)).TAKER_FEE()) / 1 ether);
+            (optionPriceUsdc * (1 ether - ob.TAKER_FEE()) / 1 ether);
         int256 makeTakeAmount = 2;
         uint256 strikePrice = optEthUsd.strike / (10 ** oracleEthUsd.decimals());
         uint256 actualPrice = 2100;
@@ -765,7 +765,7 @@ contract OrderBookTest is BaseTest {
         uint256 optionPriceEth = optionPrice * 1 ether;
         // the option taker buys the option for slightly more after applying the fee
         uint256 feeAdjustedOptionPriceUsdc =
-            (optionPriceUsdc * (1 ether + OrderBook(address(ob)).TAKER_FEE()) / 1 ether);
+            (optionPriceUsdc * (1 ether + ob.TAKER_FEE()) / 1 ether);
         int256 makeTakeAmount = 2;
         uint256 strikePrice = optEthUsd.strike / (10 ** oracleEthUsd.decimals());
         uint256 actualPrice = 1900;

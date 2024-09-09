@@ -8,6 +8,9 @@ interface IOrderBook {
     event Make(uint256 indexed id, address indexed maker, int256 amount, uint256 price, uint256 expiration, uint256 indexed uniqid);
     event Cancel(bool indexed isBid, uint256 indexed id, uint256 uniqid);
 
+    function MAKER_FEE() external view returns (uint256);
+    function TAKER_FEE() external view returns (uint256);
+
     function longOptionId() external view returns (uint256);
     function bids(uint256 id) external view returns (int256 amount, uint256 price, uint256 expiration, address owner, uint256 uniqid);
     function offers(uint256 id) external view returns (int256 amount, uint256 price, uint256 expiration, address owner, uint256 uniqid);
