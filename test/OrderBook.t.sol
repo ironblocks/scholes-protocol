@@ -843,4 +843,95 @@ contract OrderBookSettleTest is BaseTest {
         // Ensure account1's WETH balance reflects the sale of the underlying asset (reduced by the number of options sold)
         assertBalanceOf(WETH, account1, (INITIAL_WETH_BALANCE - uint256(makeTakeAmount)) * 10 ** WETH.decimals());
     }
+
+    /**
+     * Tests the process of buying and settling a long put option.
+     * - Account1 deposits collateral and places a buy order for a long put option.
+     * - Account2 deposits collateral and sells the option by taking Account1's order.
+     * - Account1 settles their position.
+     * - The test verifies the correct transfer of collateral and the final settlement process after the option expiration.
+     */
+    function testBuyAndSettleLongPutOption() public {
+        // Initialize variables for the test
+        uint256 strikePrice = optEthUsdPut2000.strike / (10 ** oracleEthUsd.decimals());
+        uint256 actualPrice = 1900;
+        uint256 longOptionId = put2000OrderBook.longOptionId();
+        // the option taker sells the option for slightly less after applying the fee
+        feeAdjustedOptionPriceUsdc = (optionPriceUsdc * (1 ether - call2000OrderBook.TAKER_FEE()) / 1 ether);
+
+        // Set the initial mock price of the underlying asset (ETH)
+        oracleEthUsd.setMockPrice(actualPrice * 10 ** oracleEthUsd.decimals());
+
+        // Ensure account1 starts with zero collateral balances
+        assertCollateralsBalances(collaterals, account1, longOptionId, 0, 0);
+        // Ensure account1 has the expected initial token balances
+        assertBalanceOf(USDC, account1, INITIAL_USDC_BALANCE * 10 ** USDC.decimals());
+        assertBalanceOf(WETH, account1, INITIAL_WETH_BALANCE * 10 ** WETH.decimals());
+        // Account1 deposits collateral and prepares to buy a long option
+        vm.startPrank(account1);
+        collaterals.deposit(longOptionId, baseAmountDeposit, underlyingAmountDeposit);
+        // Ensure the correct amounts are deposited
+        assertCollateralsBalances(collaterals, account1, longOptionId, baseAmountDeposit, underlyingAmountDeposit);
+        assertBalanceOf(USDC, account1, INITIAL_USDC_BALANCE * 10 ** USDC.decimals() - baseAmountDeposit);
+        assertBalanceOf(WETH, account1, INITIAL_WETH_BALANCE * 10 ** WETH.decimals() - underlyingAmountDeposit);
+
+        // Account1 places a bid to buy the long put option
+        uint256 orderId = put2000OrderBook.make(makeTakeAmount * 1 ether, optionPriceEth, oneHourExpiration);
+
+        // Ensure account2 starts with zero collateral balances
+        assertCollateralsBalances(collaterals, account2, longOptionId, 0, 0);
+        // Ensure account2 has the expected initial token balances
+        assertBalanceOf(USDC, account2, INITIAL_USDC_BALANCE * 10 ** USDC.decimals());
+        assertBalanceOf(WETH, account2, INITIAL_WETH_BALANCE * 10 ** WETH.decimals());
+        // Account2 deposits collateral and sells the option to account1 by taking the order
+        vm.startPrank(account2, account2);
+        collaterals.deposit(longOptionId, baseAmountDeposit, underlyingAmountDeposit);
+        // Account2 takes account1's order and sells the option
+        put2000OrderBook.take(orderId, -makeTakeAmount * 1 ether, optionPriceEth);
+
+        // Ensure collateral balances reflect the purchase of the option (premium) by account1
+        assertCollateralsBalances(
+            collaterals,
+            account1,
+            longOptionId,
+            baseAmountDeposit - (uint256(makeTakeAmount) * optionPriceUsdc),
+            underlyingAmountDeposit
+        );
+        // Ensure account2's collateral balances are updated correctly after taking the order and selling the option
+        assertCollateralsBalances(
+            collaterals,
+            account2,
+            longOptionId,
+            baseAmountDeposit + (uint256(makeTakeAmount) * feeAdjustedOptionPriceUsdc),
+            underlyingAmountDeposit
+        );
+
+        // Move time forward to after the expiration of the option
+        vm.warp(options.getExpiration(longOptionId) + 1);
+        // Set the settlement price
+        options.setSettlementPrice(longOptionId);
+        assertEq(options.getSettlementPrice(longOptionId), actualPrice * 10 ** oracleEthUsd.decimals());
+        // Account1 settles their position
+        vm.startPrank(account1);
+        put2000OrderBook.settle(false);
+
+        // Check the balances after settlement to ensure all collateral is withdrawn for account1
+        assertCollateralsBalances(collaterals, account1, longOptionId, 0, 0);
+        // Account2's collateral is untouched after account1 settlement
+        assertCollateralsBalances(
+            collaterals,
+            account2,
+            longOptionId,
+            baseAmountDeposit + (uint256(makeTakeAmount) * feeAdjustedOptionPriceUsdc),
+            underlyingAmountDeposit
+        );
+        // Ensure account1's wallet USDC balance reflects the exercised option minus the option price
+        assertBalanceOf(
+            USDC,
+            account1,
+            (INITIAL_USDC_BALANCE + uint256(makeTakeAmount) * (strikePrice - optionPrice)) * (10 ** USDC.decimals())
+        );
+        // Ensure account1's WETH balance accounts for the settled amount
+        assertBalanceOf(WETH, account1, (INITIAL_WETH_BALANCE - uint256(makeTakeAmount)) * 10 ** WETH.decimals());
+    }
 }
