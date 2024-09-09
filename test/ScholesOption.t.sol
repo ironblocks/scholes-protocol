@@ -19,12 +19,10 @@ import "../src/MockTimeOracle.sol";
 import "../src/interfaces/ISpotPriceOracle.sol";
 
 contract ScholesOptionTest is BaseTest {
-    function setUp() public {
-        setUpBase();
-    }
-
     function testExerciseAndSettle() public {
-        oracle.setMockPrice(1700 * 10 ** oracle.decimals()); // WETH/USDC = 1700
+        uint256 longOptionId = call2000OrderBook.longOptionId();
+        uint256 shortOptionId = options.getOpposite(longOptionId);
+        oracleEthUsd.setMockPrice(1700 * 10 ** oracleEthUsd.decimals()); // WETH/USDC = 1700
         vm.warp(options.getExpiration(longOptionId) - 1000); // Not expired
 
         // Fund account 1 with 10000 USDC collateral
@@ -37,21 +35,21 @@ contract ScholesOptionTest is BaseTest {
 
         // Make an offer to sell 1 option at 2 USDC
         vm.startPrank(account1, account1);
-        uint256 orderId = ob.make(-1 ether, 2 ether, mockTimeOracle.getTime() + 60 * 60 /* 1 hour */ );
+        uint256 orderId = call2000OrderBook.make(-1 ether, 2 ether, mockTimeOracle.getTime() + 60 * 60 /* 1 hour */ );
 
         // Take the offer to buy 1 option at 2 USDC
         vm.startPrank(account2, account2);
-        ob.take(orderId, 1 ether, 2 ether);
+        call2000OrderBook.take(orderId, 1 ether, 2 ether);
 
         // Mock price of WETH/USDC to 2100
-        oracle.setMockPrice(2100 * 10 ** oracle.decimals());
+        oracleEthUsd.setMockPrice(2100 * 10 ** oracleEthUsd.decimals());
 
         // Option expires
         vm.warp(options.getExpiration(longOptionId) + 1);
 
         // Set settlement price
         options.setSettlementPrice(longOptionId);
-        assertEq(options.getSettlementPrice(longOptionId), 2100 * 10 ** oracle.decimals());
+        assertEq(options.getSettlementPrice(longOptionId), 2100 * 10 ** oracleEthUsd.decimals());
 
         // Exercise long holding
         vm.startPrank(account2, account2);
