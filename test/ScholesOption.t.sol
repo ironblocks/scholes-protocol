@@ -35,7 +35,7 @@ contract ScholesOptionTest is BaseTest {
 
         // Make an offer to sell 1 option at 2 USDC
         vm.startPrank(account1, account1);
-        uint256 orderId = call2000OrderBook.make(-1 ether, 2 ether, mockTimeOracle.getTime() + 60 * 60 /* 1 hour */ );
+        uint256 orderId = call2000OrderBook.make(-1 ether, 2 ether, mockTimeOracle.getTime() + 1 hours);
 
         // Take the offer to buy 1 option at 2 USDC
         vm.startPrank(account2, account2);
