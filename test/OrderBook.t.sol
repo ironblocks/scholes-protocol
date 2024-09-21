@@ -700,6 +700,9 @@ contract OrderBookSettleTest is BaseTest {
         // Account2 deposits collateral and sells the option to account1 by taking the order
         vm.startPrank(account2, account2);
         collaterals.deposit(longOptionId, baseAmountDeposit, underlyingAmountDeposit);
+        // Ensure the correct amounts are deposited
+        assertBalanceOf(USDC, account2, INITIAL_USDC_BALANCE * 10 ** USDC.decimals() - baseAmountDeposit);
+        assertBalanceOf(WETH, account2, INITIAL_WETH_BALANCE * 10 ** WETH.decimals() - underlyingAmountDeposit);
         // Account2 takes account1's order and sells the option
         call2000OrderBook.take(orderId, -makeTakeAmount * 1 ether, optionPriceEth);
 
@@ -750,6 +753,9 @@ contract OrderBookSettleTest is BaseTest {
         assert(0 < uint256(makeTakeAmount) * ((actualPrice - strikePrice) - optionPrice));
         // Ensure account1's WETH balance remains the same
         assertBalanceOf(WETH, account1, INITIAL_WETH_BALANCE * 10 ** WETH.decimals());
+        // account2's balances remains the same as after the deposit
+        assertBalanceOf(USDC, account2, INITIAL_USDC_BALANCE * 10 ** USDC.decimals() - baseAmountDeposit);
+        assertBalanceOf(WETH, account2, INITIAL_WETH_BALANCE * 10 ** WETH.decimals() - underlyingAmountDeposit);
     }
 
     /**
@@ -794,6 +800,9 @@ contract OrderBookSettleTest is BaseTest {
         // Account2 deposits collateral and buys the option from account1 by taking the sell order
         vm.startPrank(account2, account2);
         collaterals.deposit(longOptionId, baseAmountDeposit, underlyingAmountDeposit);
+        // Ensure the correct amounts are deposited
+        assertBalanceOf(USDC, account2, INITIAL_USDC_BALANCE * 10 ** USDC.decimals() - baseAmountDeposit);
+        assertBalanceOf(WETH, account2, INITIAL_WETH_BALANCE * 10 ** WETH.decimals() - underlyingAmountDeposit);
         // Account2 takes account1's sell order and buys the option
         call2000OrderBook.take(orderId, makeTakeAmount * 1 ether, optionPriceEth);
 
@@ -842,13 +851,16 @@ contract OrderBookSettleTest is BaseTest {
         );
         // Ensure account1's WETH balance reflects the sale of the underlying asset (reduced by the number of options sold)
         assertBalanceOf(WETH, account1, (INITIAL_WETH_BALANCE - uint256(makeTakeAmount)) * 10 ** WETH.decimals());
+        // account2's balances remains the same as after the deposit
+        assertBalanceOf(USDC, account2, INITIAL_USDC_BALANCE * 10 ** USDC.decimals() - baseAmountDeposit);
+        assertBalanceOf(WETH, account2, INITIAL_WETH_BALANCE * 10 ** WETH.decimals() - underlyingAmountDeposit);
     }
 
     /**
      * Tests the process of buying and settling a long put option.
      * - Account1 deposits collateral and places a buy order for a long put option.
      * - Account2 deposits collateral and sells the option by taking Account1's order.
-     * - Account1 settles their position.
+     * - Accounts 1 & 2 settle their positions.
      * - The test verifies the correct transfer of collateral and the final settlement process after the option expiration.
      */
     function testBuyAndSettleLongPutOption() public {
@@ -886,6 +898,9 @@ contract OrderBookSettleTest is BaseTest {
         // Account2 deposits collateral and sells the option to account1 by taking the order
         vm.startPrank(account2, account2);
         collaterals.deposit(longOptionId, baseAmountDeposit, underlyingAmountDeposit);
+        // Ensure the correct amounts are deposited
+        assertBalanceOf(USDC, account2, INITIAL_USDC_BALANCE * 10 ** USDC.decimals() - baseAmountDeposit);
+        assertBalanceOf(WETH, account2, INITIAL_WETH_BALANCE * 10 ** WETH.decimals() - underlyingAmountDeposit);
         // Account2 takes account1's order and sells the option
         put2000OrderBook.take(orderId, -makeTakeAmount * 1 ether, optionPriceEth);
 
@@ -933,5 +948,22 @@ contract OrderBookSettleTest is BaseTest {
         );
         // Ensure account1's WETH balance accounts for the settled amount
         assertBalanceOf(WETH, account1, (INITIAL_WETH_BALANCE - uint256(makeTakeAmount)) * 10 ** WETH.decimals());
+        // account2's balances remains the same as after the deposit
+        assertBalanceOf(USDC, account2, INITIAL_USDC_BALANCE * 10 ** USDC.decimals() - baseAmountDeposit);
+        assertBalanceOf(WETH, account2, INITIAL_WETH_BALANCE * 10 ** WETH.decimals() - underlyingAmountDeposit);
+        // Account2 settles their position
+        vm.startPrank(account2);
+        put2000OrderBook.settle(false);
+        // All collateral is withdrawn for account2
+        assertCollateralsBalances(collaterals, account2, longOptionId, 0, 0);
+        // Ensure account2's wallet USDC balance reflects the option premium received minus the bought ETH at strike price
+        assertBalanceOf(
+            USDC,
+            account2,
+            (INITIAL_USDC_BALANCE - uint256(makeTakeAmount) * (strikePrice)) * (10 ** USDC.decimals())
+                + uint256(makeTakeAmount) * feeAdjustedOptionPriceUsdc
+        );
+        // Ensure account2's WETH balance accounts for the settled amount (bought ETH)
+        assertBalanceOf(WETH, account2, (INITIAL_WETH_BALANCE + uint256(makeTakeAmount)) * 10 ** WETH.decimals());
     }
 }
