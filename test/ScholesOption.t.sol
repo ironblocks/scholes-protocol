@@ -25,6 +25,10 @@ contract ScholesOptionTest is BaseTest {
         oracleEthUsd.setMockPrice(1700 * 10 ** oracleEthUsd.decimals()); // WETH/USDC = 1700
         vm.warp(options.getExpiration(longOptionId) - 1000); // Not expired
 
+        // Check the option properties
+        assertEq(options.isCall(longOptionId), true);
+        assertEq(options.isAmerican(longOptionId), false);
+
         // Fund account 1 with 10000 USDC collateral
         vm.startPrank(account1, account1);
         collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 0 ether);
@@ -33,13 +37,26 @@ contract ScholesOptionTest is BaseTest {
         vm.startPrank(account2, account2);
         collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 0 ether);
 
+        // No holder before the option is traded
+        assertEq(options.numHolders(longOptionId), 0);
+        assertEq(options.numHolders(shortOptionId), 0);
+
         // Make an offer to sell 1 option at 2 USDC
         vm.startPrank(account1, account1);
         uint256 orderId = call2000OrderBook.make(-1 ether, 2 ether, mockTimeOracle.getTime() + 1 hours);
+        // Holders won't update until the option is taken
+        assertEq(options.numHolders(longOptionId), 0);
+        assertEq(options.numHolders(shortOptionId), 0);
 
         // Take the offer to buy 1 option at 2 USDC
         vm.startPrank(account2, account2);
         call2000OrderBook.take(orderId, 1 ether, 2 ether);
+
+        // Both accounts hold the option now
+        assertEq(options.numHolders(longOptionId), 1);
+        assertEq(options.numHolders(shortOptionId), 1);
+        assertEq(options.getHolder(shortOptionId, 0), account1);
+        assertEq(options.getHolder(longOptionId, 0), account2);
 
         // Mock price of WETH/USDC to 2100
         oracleEthUsd.setMockPrice(2100 * 10 ** oracleEthUsd.decimals());
