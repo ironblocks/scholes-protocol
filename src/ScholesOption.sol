@@ -94,6 +94,7 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         options[longId].isCall = longOptionParams.isCall;
         options[longId].isAmerican = longOptionParams.isAmerican;
         options[longId].isLong = true;
+        options[longId].isSingleCollateral = longOptionParams.isSingleCollateral;
         require(address(spotPriceOracle(longId)) != address(0), "No spot price oracle");
         require(address(schTokenSpotOracle(longId)) != address(0), "No SCH spot price oracle");
 
@@ -104,8 +105,18 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         options[shortId].isCall = longOptionParams.isCall;
         options[shortId].isAmerican = longOptionParams.isAmerican;
         options[shortId].isLong = false;
+        options[shortId].isSingleCollateral = longOptionParams.isSingleCollateral;
         collateralRequirements[shortId].entryCollateralRequirement = type(uint256).max; // Cannot trade before collateral requirements are set
         collateralRequirements[shortId].maintenanceCollateralRequirement = type(uint256).max; // Cannot trade before collateral requirements are set
+        if (longOptionParams.isSingleCollateral) {
+            uint256 cr;
+            if (longOptionParams.isCall) 
+                cr = spotPriceOracle(longId).toBase(1 ether); // 1 underlying at current price, but this needs to be constantly maintained as the price changes
+            else
+                cr = spotPriceOracle(longId).toBase(1 ether, longOptionParams.strike); // 1 underlying at strike price base
+            collateralRequirements[shortId].entryCollateralRequirement = cr;
+            collateralRequirements[shortId].maintenanceCollateralRequirement = cr;
+        }
     }
 
     function setFriendContracts(address _collaterals, address _liquidator, address _spotPriceOracleApprovedList, address _orderBookList, address _timeOracle, address _schToken) external onlyOwner {
@@ -177,6 +188,7 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
     //          This shall change as soon as the proving system is implemented.
     function setCollateralRequirements(uint256 id, uint256 entryCollateralRequirement, uint256 maintenanceCollateralRequirement, uint256 timestamp, bytes calldata proof) external {
         // Can be called by anyone, but the proof must be valid
+        require(! options[id].isSingleCollateral, "Fixed single collateral.");
         require(0 != id, "No id");
         require(!(options[id].isLong), "Only short options can have collateral requirements");
         require(timeOracle.getTime() >= timestamp, "Future timestamp");
@@ -197,13 +209,15 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         // // Verify the proof
         // require(ecrecover(hash, v, r, s) == owner(), "Invalid proof");
         // Enter the values
-        collateralRequirements[id].entryCollateralRequirement = entryCollateralRequirement;
-        collateralRequirements[id].maintenanceCollateralRequirement = maintenanceCollateralRequirement;
+        collateralRequirements[id].entryCollateralRequirement = entryCollateralRequirement; // Collateral requirement to enter 1 short option (expressed in base collateral tokens)
+        collateralRequirements[id].maintenanceCollateralRequirement = maintenanceCollateralRequirement; // Collateral requirement to keep 1 short option without risking liquidation (expressed in base collateral tokens)
         collateralRequirements[id].timestamp = timestamp;
     }
 
+    // !!! Dangerous: Never use collateralRequirements[id] directly - always call this function
     function getCollateralRequirementThreshold(uint256 id, bool entry) public view returns (uint256) {
-        // !!! Uncomment this: require(timeOracle.getTime() <= collateralRequirements[id].timestamp + STALE_COLLATERAL_REQUIREMENT_TIMEOUT, "Stale collateral requirements");
+        // !!! Uncomment this: options[id].isSingleCollateral || timeOracle.getTime() <= collateralRequirements[id].timestamp + STALE_COLLATERAL_REQUIREMENT_TIMEOUT, "Stale collateral requirements");
+        if (options[id].isSingleCollateral && options[id].isCall) return spotPriceOracle(id).toBase(1 ether); // 1 underlying at current price
         return entry ? collateralRequirements[id].entryCollateralRequirement : collateralRequirements[id].maintenanceCollateralRequirement;
     }
 
