@@ -20,7 +20,7 @@ import "../src/interfaces/ISpotPriceOracle.sol";
 
 contract ScholesOptionTest is BaseTest {
     function testExerciseAndSettle() public {
-        uint256 longOptionId = call2000OrderBook.longOptionId();
+        uint256 longOptionId = callDC2000OrderBook.longOptionId();
         uint256 shortOptionId = options.getOpposite(longOptionId);
         oracleEthUsd.setMockPrice(1700 * 10 ** oracleEthUsd.decimals()); // WETH/USDC = 1700
         vm.warp(options.getExpiration(longOptionId) - 1000); // Not expired
@@ -43,14 +43,14 @@ contract ScholesOptionTest is BaseTest {
 
         // Make an offer to sell 1 option at 2 USDC
         vm.startPrank(account1, account1);
-        uint256 orderId = call2000OrderBook.make(-1 ether, 2 ether, mockTimeOracle.getTime() + 1 hours);
+        uint256 orderId = callDC2000OrderBook.make(-1 ether, 2 ether, mockTimeOracle.getTime() + 1 hours);
         // Holders won't update until the option is taken
         assertEq(options.numHolders(longOptionId), 0);
         assertEq(options.numHolders(shortOptionId), 0);
 
         // Take the offer to buy 1 option at 2 USDC
         vm.startPrank(account2, account2);
-        call2000OrderBook.take(orderId, 1 ether, 2 ether);
+        callDC2000OrderBook.take(orderId, 1 ether, 2 ether);
 
         // Both accounts hold the option now
         assertEq(options.numHolders(longOptionId), 1);
