@@ -563,6 +563,53 @@ contract OrderBookTest is BaseTest {
     }
 
     /**
+     * Test the `sweepAndMake` function to ensure it correctly handles full order matching and no make.
+     * This is a test specifically for single collateral option where all participants deposited collateral.
+     */
+    function testSweepAndMakeNoMakeSingleCollateral() public {
+        // Order book should be empty at first
+        assertOrderCounts(callSC3000OrderBook, 0, 0);
+        oracleEthUsd.setMockPrice(3000 * 10 ** oracleEthUsd.decimals());
+        uint256 twoHourExpiration = mockTimeOracle.getTime() + 2 hours;
+        uint256 longOptionId = callSC3000OrderBook.longOptionId();
+        // Account1 makes an offer
+        vm.startPrank(account1);
+        uint256 offerId = callSC3000OrderBook.make(-5 ether, 1 ether, oneHourExpiration);
+        collaterals.deposit(longOptionId, 0, 10 ether);
+        // Account2 places a bid
+        vm.startPrank(account2);
+        uint256 bidId = callSC3000OrderBook.make(5 ether, 1 ether, oneHourExpiration);
+        collaterals.deposit(longOptionId, 0, 10 ether);
+        // We now have 2 orders on the book
+        assertOrderCounts(callSC3000OrderBook, 1, 1);
+        // Prepare the sweep and make to fully take from offerId
+        TTakerEntry[] memory makers = new TTakerEntry[](1);
+        makers[0] = TTakerEntry(offerId, 5 ether, 1 ether);
+        TMakerEntry memory toMake = TMakerEntry(0, 0, twoHourExpiration);
+        // Prepare the account3 for the sweep and make
+        vm.startPrank(account3);
+        collaterals.deposit(longOptionId, 0, 10 ether);
+        bool forceFunding = false;
+        uint256 newOrderId = callSC3000OrderBook.sweepAndMake(forceFunding, 0, makers, toMake);
+        // no new order ID since no `toMake`
+        assertEq(newOrderId, 0);
+        // The offer was fully matched and removed from the order book
+        assertOrderCounts(callSC3000OrderBook, 1, 0);
+        // Now let's check the order book item in detail to verify that
+        // The bid wasn't matching and shouldn't have been touched
+        {
+            bool isBid = true;
+            int256 expectedAmount = 5 ether;
+            uint256 expectedPrice = 1 ether;
+            uint256 expectedExpiration = oneHourExpiration;
+            address expectedOwner = account2;
+            assertOrder(
+                callSC3000OrderBook, isBid, bidId, expectedAmount, expectedPrice, expectedExpiration, expectedOwner
+            );
+        }
+    }
+
+    /**
      * Test the vanish function with a valid liquidation.
      * Ensures that calling vanish correctly processes the list of orders and liquidates up to the specified amount.
      */
