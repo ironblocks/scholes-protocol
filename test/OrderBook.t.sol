@@ -69,8 +69,8 @@ contract OrderBookTest is BaseTest {
      * This function helps ensure the state of the OrderBook is as expected after operations that
      * should alter the counts of bids or offers.
      */
-    function assertOrderCounts(uint256 expectedBids, uint256 expectedOffers) private {
-        (uint256 numBids, uint256 numOffers) = callDC2000OrderBook.numOrders();
+    function assertOrderCounts(IOrderBook orderBook, uint256 expectedBids, uint256 expectedOffers) private {
+        (uint256 numBids, uint256 numOffers) = orderBook.numOrders();
         assertEq(numBids, expectedBids, "Mismatch in expected number of bids.");
         assertEq(numOffers, expectedOffers, "Mismatch in expected number of offers.");
     }
@@ -82,9 +82,9 @@ contract OrderBookTest is BaseTest {
      * @param orderId The ID of the order.
      * @return TOrderBookItem The constructed order struct.
      */
-    function getOrderBookItem(bool isBid, uint256 orderId) private view returns (OrderBook.TOrderBookItem memory) {
+    function getOrderBookItem(IOrderBook orderBook, bool isBid, uint256 orderId) private view returns (OrderBook.TOrderBookItem memory) {
         (int256 amount, uint256 price, uint256 expiration, address owner, uint256 uniqid) =
-            isBid ? callDC2000OrderBook.bids(orderId) : callDC2000OrderBook.offers(orderId);
+            isBid ? orderBook.bids(orderId) : orderBook.offers(orderId);
         return OrderBook.TOrderBookItem({
             amount: amount,
             price: price,
@@ -136,7 +136,7 @@ contract OrderBookTest is BaseTest {
         uint256 expectedExpiration,
         address expectedOwner
     ) private {
-        OrderBook.TOrderBookItem memory order = getOrderBookItem(isBid, orderId);
+        OrderBook.TOrderBookItem memory order = getOrderBookItem(callDC2000OrderBook, isBid, orderId);
         assertOrder(order, expectedAmount, expectedPrice, expectedExpiration, expectedOwner);
     }
 
@@ -159,17 +159,17 @@ contract OrderBookTest is BaseTest {
         callDC2000OrderBook.make(-5 ether, 1 ether, oneHourExpiration);
         callDC2000OrderBook.make(5 ether, 1 ether, oneHourExpiration);
         // We now have 2 orders on the book
-        assertOrderCounts(1, 1);
+        assertOrderCounts(callDC2000OrderBook, 1, 1);
         // Move time forward to after the expiration of the option
         vm.warp(options.getExpiration(callDC2000OrderBook.longOptionId()) + 1);
         // Destroy the order book
         callDC2000OrderBook.destroy();
         // Ensure the order book is empty
-        assertOrderCounts(0, 0);
+        assertOrderCounts(callDC2000OrderBook, 0, 0);
         // Destroy can be called multiple times with no issue
         callDC2000OrderBook.destroy();
         // Ensure the order book remains empty
-        assertOrderCounts(0, 0);
+        assertOrderCounts(callDC2000OrderBook, 0, 0);
     }
 
     /**
@@ -190,7 +190,7 @@ contract OrderBookTest is BaseTest {
         uint256 longOptionId = callDC2000OrderBook.longOptionId();
         oracleEthUsd.setMockPrice(2000 * 10 ** oracleEthUsd.decimals());
         // order book should be empty at first
-        assertOrderCounts(0, 0);
+        assertOrderCounts(callDC2000OrderBook, 0, 0);
         // prepare and place the make order
         vm.startPrank(maker, maker);
         collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 10 ether);
@@ -202,8 +202,8 @@ contract OrderBookTest is BaseTest {
         bool isBid = takeAmount < 0;
         assertOrder(isBid, orderId, makeAmount, takeMakePrice, oneHourExpiration, maker);
         // the order book should be updated with the new order
-        if (isBid) assertOrderCounts(1, 0);
-        else assertOrderCounts(0, 1);
+        if (isBid) assertOrderCounts(callDC2000OrderBook, 1, 0);
+        else assertOrderCounts(callDC2000OrderBook, 0, 1);
         // prepare and place the take order
         vm.startPrank(taker, taker);
         collaterals.deposit(longOptionId, 10000 * 10 ** USDC.decimals(), 10 ether);
@@ -211,7 +211,7 @@ contract OrderBookTest is BaseTest {
         // expectNextCallTakeEvent(expectedOrderId, maker, taker, takeAmount);
         callDC2000OrderBook.take(orderId, takeAmount, takeMakePrice);
         // order book should be empty again
-        assertOrderCounts(0, 0);
+        assertOrderCounts(callDC2000OrderBook, 0, 0);
     }
 
     /**
@@ -240,7 +240,7 @@ contract OrderBookTest is BaseTest {
      */
     function testCancelOutOfBounds() public {
         // Order book should be empty at first
-        assertOrderCounts(0, 0);
+        assertOrderCounts(callDC2000OrderBook, 0, 0);
         uint256 orderId = 0;
         bool isBid = true;
         vm.expectRevert(stdError.indexOOBError);
@@ -258,7 +258,7 @@ contract OrderBookTest is BaseTest {
         address owner = account1;
         address unauthorizedUser = account2;
         // Order book should be empty at first
-        assertOrderCounts(0, 0);
+        assertOrderCounts(callDC2000OrderBook, 0, 0);
         // Add a bid and an offer
         vm.startPrank(owner);
         uint256 bidOrderId = callDC2000OrderBook.make(1 ether, 1 ether, oneHourExpiration);
@@ -269,7 +269,7 @@ contract OrderBookTest is BaseTest {
         isBid = false;
         isMine = callDC2000OrderBook.isMine(isBid, offerOrderId);
         assertEq(isMine, true);
-        assertOrderCounts(1, 1);
+        assertOrderCounts(callDC2000OrderBook, 1, 1);
         vm.startPrank(unauthorizedUser);
         // Try to cancel the bid with an unauthorized user
         isBid = true;
@@ -278,7 +278,7 @@ contract OrderBookTest is BaseTest {
         vm.expectRevert("Unauthorized");
         callDC2000OrderBook.cancel(isBid, bidOrderId);
         // Ensure the orders are still present
-        assertOrderCounts(1, 1);
+        assertOrderCounts(callDC2000OrderBook, 1, 1);
         // Try to cancel the offer with an unauthorized user
         isBid = false;
         isMine = callDC2000OrderBook.isMine(isBid, offerOrderId);
@@ -286,7 +286,7 @@ contract OrderBookTest is BaseTest {
         vm.expectRevert("Unauthorized");
         callDC2000OrderBook.cancel(isBid, offerOrderId);
         // Ensure the orders are still present
-        assertOrderCounts(1, 1);
+        assertOrderCounts(callDC2000OrderBook, 1, 1);
     }
 
     /**
@@ -295,20 +295,20 @@ contract OrderBookTest is BaseTest {
      */
     function testCancelLastOrder() public {
         // Order book should be empty at first
-        assertOrderCounts(0, 0);
+        assertOrderCounts(callDC2000OrderBook, 0, 0);
         int256 makeAmount = 1 ether;
         uint256 makePrice = 1 ether;
         uint256 bidOrderId = callDC2000OrderBook.make(makeAmount, makePrice, oneHourExpiration);
-        assertOrderCounts(1, 0);
+        assertOrderCounts(callDC2000OrderBook, 1, 0);
         makeAmount = -1 ether;
         uint256 offerOrderId = callDC2000OrderBook.make(makeAmount, makePrice, oneHourExpiration);
-        assertOrderCounts(1, 1);
+        assertOrderCounts(callDC2000OrderBook, 1, 1);
         bool isBid = true;
         callDC2000OrderBook.cancel(isBid, bidOrderId);
-        assertOrderCounts(0, 1);
+        assertOrderCounts(callDC2000OrderBook, 0, 1);
         isBid = false;
         callDC2000OrderBook.cancel(isBid, offerOrderId);
-        assertOrderCounts(0, 0);
+        assertOrderCounts(callDC2000OrderBook, 0, 0);
     }
 
     /**
@@ -317,17 +317,17 @@ contract OrderBookTest is BaseTest {
      */
     function testCancelNonLastBid() public {
         // Order book should be empty at first
-        assertOrderCounts(0, 0);
+        assertOrderCounts(callDC2000OrderBook, 0, 0);
         // Add multiple bids
         uint256 bidOrderId1 = callDC2000OrderBook.make(1 ether, 1 ether, oneHourExpiration);
         uint256 bidOrderId2 = callDC2000OrderBook.make(2 ether, 2 ether, oneHourExpiration);
         uint256 bidOrderId3 = callDC2000OrderBook.make(3 ether, 3 ether, oneHourExpiration);
         assertEq(bidOrderId3, 2);
-        assertOrderCounts(3, 0);
+        assertOrderCounts(callDC2000OrderBook, 3, 0);
         // Cancel the second bid
         bool isBid = true;
         callDC2000OrderBook.cancel(isBid, bidOrderId2);
-        assertOrderCounts(2, 0);
+        assertOrderCounts(callDC2000OrderBook, 2, 0);
         // Check the remaining orders
         (int256 amount1,,,) = callDC2000OrderBook.status(isBid, bidOrderId1);
         assertEq(amount1, 1 ether);
@@ -342,17 +342,17 @@ contract OrderBookTest is BaseTest {
      */
     function testCancelNonLastOffer() public {
         // Order book should be empty at first
-        assertOrderCounts(0, 0);
+        assertOrderCounts(callDC2000OrderBook, 0, 0);
         // Add multiple offers
         uint256 offerOrderId1 = callDC2000OrderBook.make(-1 ether, 1 ether, oneHourExpiration);
         uint256 offerOrderId2 = callDC2000OrderBook.make(-2 ether, 2 ether, oneHourExpiration);
         uint256 offerOrderId3 = callDC2000OrderBook.make(-3 ether, 3 ether, oneHourExpiration);
         assertEq(offerOrderId3, 2);
-        assertOrderCounts(0, 3);
+        assertOrderCounts(callDC2000OrderBook, 0, 3);
         // Cancel the second offer
         bool isBid = false;
         callDC2000OrderBook.cancel(isBid, offerOrderId2);
-        assertOrderCounts(0, 2);
+        assertOrderCounts(callDC2000OrderBook, 0, 2);
         // Check the remaining orders
         (int256 amount1,,,) = callDC2000OrderBook.status(isBid, offerOrderId1);
         assertEq(amount1, -1 ether);
@@ -368,7 +368,7 @@ contract OrderBookTest is BaseTest {
      */
     function testSweepAndMake() public {
         // Order book should be empty at first
-        assertOrderCounts(0, 0);
+        assertOrderCounts(callDC2000OrderBook, 0, 0);
         oracleEthUsd.setMockPrice(2000 * 10 ** oracleEthUsd.decimals());
         uint256 twoHourExpiration = mockTimeOracle.getTime() + 2 hours;
         // Account1 makes an offer
@@ -378,7 +378,7 @@ contract OrderBookTest is BaseTest {
         vm.startPrank(account2);
         uint256 bidId = callDC2000OrderBook.make(5 ether, 1 ether, oneHourExpiration);
         // We now have 2 orders on the book
-        assertOrderCounts(1, 1);
+        assertOrderCounts(callDC2000OrderBook, 1, 1);
         // Prepare the sweep and make to partially take from offerId
         TTakerEntry[] memory makers = new TTakerEntry[](1);
         makers[0] = TTakerEntry(offerId, 1.5 ether, 1 ether);
@@ -391,7 +391,7 @@ contract OrderBookTest is BaseTest {
         assertEq(newOrderId, 1);
         // We have a new bid coming from the `toMake`
         // The rest of the orders are still there since `makers` was only matching partially
-        assertOrderCounts(2, 1);
+        assertOrderCounts(callDC2000OrderBook, 2, 1);
         // Now let's check each order book item in detail to verify that
         // The bid wasn't matching and shouldn't have been touched
         {
@@ -429,7 +429,7 @@ contract OrderBookTest is BaseTest {
      */
     function testSweepAndMakeNoMake() public {
         // Order book should be empty at first
-        assertOrderCounts(0, 0);
+        assertOrderCounts(callDC2000OrderBook, 0, 0);
         oracleEthUsd.setMockPrice(2000 * 10 ** oracleEthUsd.decimals());
         uint256 twoHourExpiration = mockTimeOracle.getTime() + 2 hours;
         // Account1 makes an offer
@@ -439,7 +439,7 @@ contract OrderBookTest is BaseTest {
         vm.startPrank(account2);
         uint256 bidId = callDC2000OrderBook.make(5 ether, 1 ether, oneHourExpiration);
         // We now have 2 orders on the book
-        assertOrderCounts(1, 1);
+        assertOrderCounts(callDC2000OrderBook, 1, 1);
         // Prepare the sweep and make to fully take from offerId
         TTakerEntry[] memory makers = new TTakerEntry[](1);
         makers[0] = TTakerEntry(offerId, 5 ether, 1 ether);
@@ -451,7 +451,7 @@ contract OrderBookTest is BaseTest {
         // no new order ID since no `toMake`
         assertEq(newOrderId, 0);
         // The offer was fully matched and removed from the order book
-        assertOrderCounts(1, 0);
+        assertOrderCounts(callDC2000OrderBook, 1, 0);
         // Now let's check each order book item in detail to verify that
         // The bid wasn't matching and shouldn't have been touched
         {
@@ -479,7 +479,7 @@ contract OrderBookTest is BaseTest {
         vm.startPrank(account2);
         uint256 bidId = callDC2000OrderBook.make(5 ether, 1 ether, expiration);
         // We now have 2 orders on the book
-        assertOrderCounts(1, 1);
+        assertOrderCounts(callDC2000OrderBook, 1, 1);
         // Prepare the sweep and make with inconsistent maker amounts
         TTakerEntry[] memory makers = new TTakerEntry[](2);
         makers[0] = TTakerEntry(offerId, 1.5 ether, 1 ether); // Positive amount
@@ -567,7 +567,7 @@ contract OrderBookTest is BaseTest {
         uint256 bidId1 = callDC2000OrderBook.make(2 ether, 1 ether, oneHourExpiration);
         uint256 bidId2 = callDC2000OrderBook.make(3 ether, 1 ether, oneHourExpiration);
         // We now have 3 orders on the book
-        assertOrderCounts(2, 1);
+        assertOrderCounts(callDC2000OrderBook, 2, 1);
         // Check the balances before
         uint256 collateralsBalanceBefore = collaterals.balanceOf(account3, collateralsId);
         uint256 optionsBalanceBefore = options.balanceOf(account3, shortOptionId);
@@ -581,7 +581,7 @@ contract OrderBookTest is BaseTest {
         vm.startPrank(account3);
         callDC2000OrderBook.vanish(account3, makers, 5 ether);
         // The two bids were matched
-        assertOrderCounts(0, 1);
+        assertOrderCounts(callDC2000OrderBook, 0, 1);
         // The account3 balances increased
         uint256 collateralsBalanceAfter = collaterals.balanceOf(account3, collateralsId);
         uint256 optionsBalanceAfter = options.balanceOf(account3, shortOptionId);
@@ -603,7 +603,7 @@ contract OrderBookTest is BaseTest {
         uint256 bidId1 = callDC2000OrderBook.make(2 ether, 1 ether, oneHourExpiration);
         uint256 bidId2 = callDC2000OrderBook.make(3 ether, 1 ether, oneHourExpiration);
         // We now have 2 bids on the book
-        assertOrderCounts(2, 0);
+        assertOrderCounts(callDC2000OrderBook, 2, 0);
         // Prepare the vanish operation
         TTakerEntry[] memory makers = new TTakerEntry[](2);
         makers[0] = TTakerEntry(bidId2, -3 ether, 1 ether);
@@ -627,7 +627,7 @@ contract OrderBookTest is BaseTest {
         uint256 bidId1 = callDC2000OrderBook.make(2 ether, 1 ether, oneHourExpiration);
         uint256 bidId2 = callDC2000OrderBook.make(3 ether, 1 ether, oneHourExpiration);
         // We now have 2 bids on the book
-        assertOrderCounts(2, 0);
+        assertOrderCounts(callDC2000OrderBook, 2, 0);
         // Prepare the vanish operation with inconsistent maker amounts
         TTakerEntry[] memory makers = new TTakerEntry[](2);
         makers[0] = TTakerEntry(bidId1, -1.5 ether, 1 ether); // Negative amount, valid for sell
