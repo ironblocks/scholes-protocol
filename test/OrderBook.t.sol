@@ -78,11 +78,16 @@ contract OrderBookTest is BaseTest {
     /**
      * Retrieves an order from the order book and converts it to a TOrderBookItem struct.
      *
+     * @param orderBook The order book to retrieve the item from.
      * @param isBid Indicates whether to retrieve from bids (true) or offers (false).
      * @param orderId The ID of the order.
      * @return TOrderBookItem The constructed order struct.
      */
-    function getOrderBookItem(IOrderBook orderBook, bool isBid, uint256 orderId) private view returns (OrderBook.TOrderBookItem memory) {
+    function getOrderBookItem(IOrderBook orderBook, bool isBid, uint256 orderId)
+        private
+        view
+        returns (OrderBook.TOrderBookItem memory)
+    {
         (int256 amount, uint256 price, uint256 expiration, address owner, uint256 uniqid) =
             isBid ? orderBook.bids(orderId) : orderBook.offers(orderId);
         return OrderBook.TOrderBookItem({
@@ -121,6 +126,7 @@ contract OrderBookTest is BaseTest {
      * Asserts the parameters of a given order by retrieving it from the order book.
      * This function helps ensure the order details match the expected values.
      *
+     * @param orderBook The order book to retrieve the item from.
      * @param isBid Indicates whether to retrieve from bids (true) or offers (false).
      * @param orderId The ID of the order.
      * @param expectedAmount The expected amount of the order.
@@ -129,6 +135,7 @@ contract OrderBookTest is BaseTest {
      * @param expectedOwner The expected owner of the order.
      */
     function assertOrder(
+        IOrderBook orderBook,
         bool isBid,
         uint256 orderId,
         int256 expectedAmount,
@@ -136,7 +143,7 @@ contract OrderBookTest is BaseTest {
         uint256 expectedExpiration,
         address expectedOwner
     ) private {
-        OrderBook.TOrderBookItem memory order = getOrderBookItem(callDC2000OrderBook, isBid, orderId);
+        OrderBook.TOrderBookItem memory order = getOrderBookItem(orderBook, isBid, orderId);
         assertOrder(order, expectedAmount, expectedPrice, expectedExpiration, expectedOwner);
     }
 
@@ -200,7 +207,7 @@ contract OrderBookTest is BaseTest {
         assertEq(orderId, expectedOrderId);
         // verify the order was placed and appears in the book
         bool isBid = takeAmount < 0;
-        assertOrder(isBid, orderId, makeAmount, takeMakePrice, oneHourExpiration, maker);
+        assertOrder(callDC2000OrderBook, isBid, orderId, makeAmount, takeMakePrice, oneHourExpiration, maker);
         // the order book should be updated with the new order
         if (isBid) assertOrderCounts(callDC2000OrderBook, 1, 0);
         else assertOrderCounts(callDC2000OrderBook, 0, 1);
@@ -400,7 +407,9 @@ contract OrderBookTest is BaseTest {
             uint256 expectedPrice = 1 ether;
             uint256 expectedExpiration = oneHourExpiration;
             address expectedOwner = account2;
-            assertOrder(isBid, bidId, expectedAmount, expectedPrice, expectedExpiration, expectedOwner);
+            assertOrder(
+                callDC2000OrderBook, isBid, bidId, expectedAmount, expectedPrice, expectedExpiration, expectedOwner
+            );
         }
         // The new `toMake` order was placed
         {
@@ -409,7 +418,9 @@ contract OrderBookTest is BaseTest {
             uint256 expectedPrice = 2 ether;
             uint256 expectedExpiration = twoHourExpiration;
             address expectedOwner = account3;
-            assertOrder(isBid, newOrderId, expectedAmount, expectedPrice, expectedExpiration, expectedOwner);
+            assertOrder(
+                callDC2000OrderBook, isBid, newOrderId, expectedAmount, expectedPrice, expectedExpiration, expectedOwner
+            );
         }
         // The offer was partially matching and its amount got updated
         {
@@ -418,7 +429,9 @@ contract OrderBookTest is BaseTest {
             uint256 expectedPrice = 1 ether;
             uint256 expectedExpiration = oneHourExpiration;
             address expectedOwner = account1;
-            assertOrder(isBid, offerId, expectedAmount, expectedPrice, expectedExpiration, expectedOwner);
+            assertOrder(
+                callDC2000OrderBook, isBid, offerId, expectedAmount, expectedPrice, expectedExpiration, expectedOwner
+            );
         }
     }
 
@@ -452,7 +465,7 @@ contract OrderBookTest is BaseTest {
         assertEq(newOrderId, 0);
         // The offer was fully matched and removed from the order book
         assertOrderCounts(callDC2000OrderBook, 1, 0);
-        // Now let's check each order book item in detail to verify that
+        // Now let's check the order book item in detail to verify that
         // The bid wasn't matching and shouldn't have been touched
         {
             bool isBid = true;
@@ -460,7 +473,9 @@ contract OrderBookTest is BaseTest {
             uint256 expectedPrice = 1 ether;
             uint256 expectedExpiration = oneHourExpiration;
             address expectedOwner = account2;
-            assertOrder(isBid, bidId, expectedAmount, expectedPrice, expectedExpiration, expectedOwner);
+            assertOrder(
+                callDC2000OrderBook, isBid, bidId, expectedAmount, expectedPrice, expectedExpiration, expectedOwner
+            );
         }
     }
 
