@@ -592,7 +592,8 @@ contract OrderBookTest is BaseTest {
         bool forceFunding = true;
         // Approve the underlying collateral transfer from this contract to the order book
         WETH.approve(address(callSC3000OrderBook), 10 ether);
-        uint256 newOrderId = callSC3000OrderBook.sweepAndMake(forceFunding, 1 ether /*all in underlying*/, makers, toMake);
+        uint256 newOrderId =
+            callSC3000OrderBook.sweepAndMake(forceFunding, 1 ether, /*all in underlying*/ makers, toMake);
         // no new order ID since no `toMake`
         assertEq(newOrderId, 0);
         // The offer was fully matched and removed from the order book
@@ -607,6 +608,53 @@ contract OrderBookTest is BaseTest {
             address expectedOwner = account2;
             assertOrder(
                 callSC3000OrderBook, isBid, bidId, expectedAmount, expectedPrice, expectedExpiration, expectedOwner
+            );
+        }
+    }
+
+    /**
+     * Test the `sweepAndMake` function to ensure it correctly handles put on single collateral.
+     */
+    function testSweepAndMakePutNoMakeSingleCollateral() public {
+        // Order book should be empty at first
+        assertOrderCounts(putSC3000OrderBook, 0, 0);
+        oracleEthUsd.setMockPrice(3000 * 10 ** oracleEthUsd.decimals());
+        uint256 twoHourExpiration = mockTimeOracle.getTime() + 2 hours;
+        uint256 longOptionId = putSC3000OrderBook.longOptionId();
+        // Account1 makes an offer (matching)
+        vm.startPrank(account1);
+        uint256 offerId = putSC3000OrderBook.make(-5 ether, 1 ether, oneHourExpiration);
+        collaterals.deposit(longOptionId, 15000 * 10 ** USDC.decimals(), 0);
+        // Account2 places a bid (not matching)
+        vm.startPrank(account2);
+        uint256 bidId = putSC3000OrderBook.make(5 ether, 1 ether, oneHourExpiration);
+        collaterals.deposit(longOptionId, 15000 * 10 ** USDC.decimals(), 0);
+        // We now have 2 orders on the book
+        assertOrderCounts(putSC3000OrderBook, 1, 1);
+        // Prepare the sweep and make to fully take from offerId
+        TTakerEntry[] memory makers = new TTakerEntry[](1);
+        makers[0] = TTakerEntry(offerId, 5 ether, 1 ether);
+        TMakerEntry memory toMake = TMakerEntry(0, 0, twoHourExpiration);
+        // Prepare the account3 for the sweep and make
+        vm.startPrank(account3);
+        bool forceFunding = true;
+        // Approve the base collateral transfer from this contract to the order book
+        USDC.approve(address(putSC3000OrderBook), 6 * 10 ** USDC.decimals());
+        uint256 newOrderId = putSC3000OrderBook.sweepAndMake(forceFunding, 0 ether, /*all in base*/ makers, toMake);
+        // no new order ID since no `toMake`
+        assertEq(newOrderId, 0);
+        // The offer was fully matched and removed from the order book
+        assertOrderCounts(putSC3000OrderBook, 1, 0);
+        // Now let's check the order book item in detail to verify that
+        // The bid wasn't matching and shouldn't have been touched
+        {
+            bool isBid = true;
+            int256 expectedAmount = 5 ether;
+            uint256 expectedPrice = 1 ether;
+            uint256 expectedExpiration = oneHourExpiration;
+            address expectedOwner = account2;
+            assertOrder(
+                putSC3000OrderBook, isBid, bidId, expectedAmount, expectedPrice, expectedExpiration, expectedOwner
             );
         }
     }
