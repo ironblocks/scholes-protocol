@@ -588,9 +588,11 @@ contract OrderBookTest is BaseTest {
         TMakerEntry memory toMake = TMakerEntry(0, 0, twoHourExpiration);
         // Prepare the account3 for the sweep and make
         vm.startPrank(account3);
-        collaterals.deposit(longOptionId, 0, 10 ether);
-        bool forceFunding = false;
-        uint256 newOrderId = callSC3000OrderBook.sweepAndMake(forceFunding, 0, makers, toMake);
+        // collaterals.deposit(longOptionId, 0, 10 ether); // No need - forced funding
+        bool forceFunding = true;
+        // Approve the underlying collateral transfer from this contract to the order book
+        WETH.approve(address(callSC3000OrderBook), 10 ether);
+        uint256 newOrderId = callSC3000OrderBook.sweepAndMake(forceFunding, 1 ether /*all in underlying*/, makers, toMake);
         // no new order ID since no `toMake`
         assertEq(newOrderId, 0);
         // The offer was fully matched and removed from the order book
