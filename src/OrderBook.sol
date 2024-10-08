@@ -136,9 +136,9 @@ contract OrderBook is IOrderBook, ERC1155Holder {
             }
             scholesOptions.getBaseToken(longOptionId).approve(address(scholesOptions.collaterals()), toDepositBase); // Approve the deposit into the collateral contract
             scholesOptions.getUnderlyingToken(longOptionId).approve(address(scholesOptions.collaterals()), toDepositUnderlying); // Approve the deposit into the collateral contract
-            scholesOptions.collaterals().deposit(longOptionId, toDepositBase, toDepositUnderlying); // Deposit the base collateral into the collateral contract
+            scholesOptions.collaterals().deposit(longOptionId, toDepositBase, toDepositUnderlying); // Deposit the collateral into the collateral contract
             scholesOptions.collaterals().safeTransferFrom(address(this), msg.sender, scholesOptions.collaterals().getId(uint256(longOptionId), true), toDepositBase, ""); // Transfer the base collateral to the caller
-            scholesOptions.collaterals().safeTransferFrom(address(this), msg.sender, scholesOptions.collaterals().getId(uint256(longOptionId), false), toDepositUnderlying, ""); // Transfer the base collateral to the caller
+            scholesOptions.collaterals().safeTransferFrom(address(this), msg.sender, scholesOptions.collaterals().getId(uint256(longOptionId), false), toDepositUnderlying, ""); // Transfer the underlying collateral to the caller
         }
         for (uint256 index = 0; index < makers.length; index++) {
             require(isBuy ? makers[index].amount > 0 : makers[index].amount < 0, "Inconsistent component orders");
