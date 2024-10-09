@@ -30,6 +30,7 @@ contract BaseTest is Test {
     IOrderBook public callDC2000OrderBook; // call, dual collateral, 2000
     IOrderBook public putDC2000OrderBook; // put, dual collateral, 2000
     IOrderBook public callSC3000OrderBook; // call, single collateral, 3000
+    IOrderBook public putSC3000OrderBook; // put, single collateral, 3000
     IScholesOption public options;
     IScholesCollateral collaterals;
     IERC20Metadata USDC;
@@ -39,6 +40,7 @@ contract BaseTest is Test {
     TOptionParams optEthUsdCallDC2000; // call, dual collateral, 2000
     TOptionParams optEthUsdPutDC2000; // put, dual collateral, 2000
     TOptionParams optEthUsdCallSC3000; // call, single collateral, 3000
+    TOptionParams optEthUsdPutSC3000; // put, single collateral, 3000
     uint256 oneHourExpiration;
     uint256 INITIAL_USDC_BALANCE = 100000; // 100K
     uint256 INITIAL_WETH_BALANCE = 100;
@@ -137,6 +139,16 @@ contract BaseTest is Test {
         optEthUsdCallSC3000.isLong = true;
         optEthUsdCallSC3000.isSingleCollateral = true;
 
+        // Put, single collateral
+        optEthUsdPutSC3000.underlying = WETH;
+        optEthUsdPutSC3000.base = USDC;
+        optEthUsdPutSC3000.strike = 3000 * 10 ** oracleEthUsd.decimals();
+        optEthUsdPutSC3000.expiration = block.timestamp + 30 days;
+        optEthUsdPutSC3000.isCall = false;
+        optEthUsdPutSC3000.isAmerican = false;
+        optEthUsdPutSC3000.isLong = true;
+        optEthUsdPutSC3000.isSingleCollateral = true;
+
         // TCollateralRequirements memory colreq;
         // colreq.entryCollateralRequirement = 2 ether / 10; // 0.2
         // colreq.maintenanceCollateralRequirement = 1 ether / 10; // 0.1
@@ -146,10 +158,12 @@ contract BaseTest is Test {
         // needed for single collateral as we create the pair
         oracleEthUsd.setMockPrice(3000 * 10 ** oracleEthUsd.decimals());
         obList.createScholesOptionPair(optEthUsdCallSC3000);
+        obList.createScholesOptionPair(optEthUsdPutSC3000);
 
         callDC2000OrderBook = obList.getOrderBook(0);
         putDC2000OrderBook = obList.getOrderBook(1);
         callSC3000OrderBook = obList.getOrderBook(2);
+        putSC3000OrderBook = obList.getOrderBook(3);
         console.log("WETH/USDC order book: ", address(callDC2000OrderBook));
         console.log("Long Option Id:", callDC2000OrderBook.longOptionId());
         options.setCollateralRequirements(
@@ -173,6 +187,10 @@ contract BaseTest is Test {
         ); // Double-check
         require(
             optEthUsdCallSC3000.expiration == options.getExpiration(callSC3000OrderBook.longOptionId()),
+            "Expiration mismatch"
+        ); // Double-check
+        require(
+            optEthUsdPutSC3000.expiration == options.getExpiration(putSC3000OrderBook.longOptionId()),
             "Expiration mismatch"
         ); // Double-check
 
