@@ -106,12 +106,12 @@ contract OrderBook is IOrderBook, ERC1155Holder {
     // Execute order by taking from the list makers and making at the end.
     // It is the caller's responsibility to ensure that the make orders for the given order ID exist and the prices match
     // as well as the amounts are sufficient.
-    // @param forceFunding If forceFunding is true, the taker will be forced to collateralize the order with base collateral
-    //   directly from the caller's address and regardless of previous collateralization.
-    // @param underlyingDepositRatio The ratio (in 18 decimals) of the underlying collateral to the base collateral to be deposited by the caller.
-    // @param makers The list of orders to take from.
-    // @param toMake The order to make at the end.
-    // @return id The ID of the order made.
+    /// @param forceFunding If forceFunding is true, the taker will be forced to collateralize the order with base collateral
+    ///   directly from the caller's address and regardless of previous collateralization.
+    /// @param underlyingDepositRatio The ratio (in 18 decimals) of the underlying collateral to the base collateral to be deposited by the caller.
+    /// @param makers The list of orders to take from.
+    /// @param toMake The order to make at the end.
+    /// @return id The ID of the order made.
     function sweepAndMake(bool forceFunding, uint256 underlyingDepositRatio, TTakerEntry[] memory makers, TMakerEntry memory toMake) external returns (uint256 id) {
         bool isBuy  = makers.length > 0 ? makers[0].amount > 0 : toMake.amount > 0;
         require(isBuy ? toMake.amount >= 0 : toMake.amount <= 0, "Inconsistent order");
