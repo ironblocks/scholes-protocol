@@ -12,6 +12,7 @@ interface IScholesCollateral is IERC1155 {
     function deposit(uint256 optionId, uint256 baseAmount, uint256 underlyingAmount) external;
     function withdraw(uint256 optionId, uint256 baseAmount, uint256 underlyingAmount) external;
     function withdrawTo(uint256 optionId, address to, uint256 baseAmount, uint256 underlyingAmount) external;
+    function withdrawToAsPossible(uint256 optionId, address to, uint256 baseAmount, uint256 underlyingAmount, uint256 conversionPrice) external;
     function balances(address owner, uint256 optionId) external view returns (uint256 baseBalance, uint256 underlyingBalance);
     function totalSupply(uint256 id) external view returns (uint256);
     function mintCollateral(address to, uint256 id, uint256 amount) external;

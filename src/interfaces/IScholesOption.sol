@@ -17,7 +17,7 @@ import "./ITimeOracle.sol";
 interface IScholesOption is IERC1155 {
     event SettlementPrice(uint256 indexed id, uint256 settlementPrice);
     event Exercise(uint256 indexed id, address indexed holder, uint256 amount, uint256 timestamp, bool toUnderlying);
-    event Settle(uint256 indexed id, address indexed holder, uint256 amount, uint256 timestamp, bool spotNotSettlement);
+    event Settle(uint256 indexed id, address indexed holder, uint256 amount, uint256 timestamp, uint256 settlementPrice);
 
     function setFriendContracts(address _collaterals, address _liquidator, address _spotPriceOracleApprovedList, address _orderBookList, address _timeOracle, address _schToken) external;
     function authorizeExchange(uint256 id, address ob) external;
