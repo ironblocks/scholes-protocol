@@ -121,6 +121,25 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         emit Withdraw(msg.sender, to, optionId, baseAmount, underlyingAmount);
     }
 
+    function withdrawToAsPossible(uint256 optionId, address to, uint256 baseAmount, uint256 underlyingAmount, uint256 conversionPrice) external {
+        if (options.getBaseToken(optionId).balanceOf(address(this)) < baseAmount) {
+            uint256 baseDiff = baseAmount - options.getBaseToken(optionId).balanceOf(address(this));
+            uint256 underlyingDiff = options.spotPriceOracle(optionId).toSpot(baseDiff, conversionPrice);
+            underlyingAmount += underlyingDiff;
+            baseAmount -= baseDiff;
+            _burn(msg.sender, getId(optionId, true), baseDiff);
+            _mint(msg.sender, getId(optionId, false), underlyingDiff, "");
+        } else if (options.getUnderlyingToken(optionId).balanceOf(address(this)) < underlyingAmount) {
+            uint256 underlyingDiff = underlyingAmount - options.getUnderlyingToken(optionId).balanceOf(address(this));
+            uint256 baseDiff = options.spotPriceOracle(optionId).toBase(underlyingDiff, conversionPrice);
+            baseAmount += baseDiff;
+            underlyingAmount -= underlyingDiff;
+            _burn(msg.sender, getId(optionId, false), underlyingDiff);
+            _mint(msg.sender, getId(optionId, true), baseDiff, "");
+        } // Otherwise, no need to do anything
+        withdrawTo(optionId, to, baseAmount, underlyingAmount);
+    }
+
     function balances(address owner, uint256 optionId) public view returns (uint256 baseBalance, uint256 underlyingBalance) {
         if (address(0) == owner) return (0, 0);
         uint256[] memory ids = new uint256[](2);
