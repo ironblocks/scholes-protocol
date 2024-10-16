@@ -11,7 +11,7 @@ set -e
 export CREATE_TEST_ORDERS="no"
 
 # To deploy and verify our contract
-forge script script/DeployAnywhere.s.sol:Deploy --rpc-url $BASE_SEPOLIA_RPC --sender $SENDER --private-key $PRIVATE_KEY --broadcast -v
+forge script script/DeployAnywhere.s.sol:Deploy --rpc-url $BASE_SEPOLIA_RPC --sender $SENDER --private-key $PRIVATE_KEY --broadcast -v --legacy
 
 ./push_artifacts.sh "DeployAnywhere.s.sol/84532"
 
