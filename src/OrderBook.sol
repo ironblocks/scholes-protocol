@@ -291,7 +291,7 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         (uint256 baseBalance, uint256 underlyingBalance) = collaterals.balances(msg.sender, longOptionId);
         collaterals.proxySafeTransferFrom(longOptionId, msg.sender, address(this), collaterals.getId(longOptionId, true), baseBalance);
         collaterals.proxySafeTransferFrom(longOptionId, msg.sender, address(this), collaterals.getId(longOptionId, false), underlyingBalance);
-        collaterals.withdrawTo(longOptionId, msg.sender, baseBalance, underlyingBalance);
+        collaterals.withdrawToAsPossible(longOptionId, msg.sender, baseBalance, underlyingBalance, scholesOptions.getSettlementPrice(longOptionId));
         emit Claim(msg.sender, baseBalance, underlyingBalance, longOptionId);
     }
 }

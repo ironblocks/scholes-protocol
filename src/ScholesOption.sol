@@ -277,137 +277,99 @@ contract ScholesOption is IScholesOption, ERC1155, Pausable, Ownable, ERC1155Sup
         require(balanceOf(holder, id) >= amount, "Insufficient holding");
         if (amount == 0) amount = balanceOf(holder, id);
         if (options[id].isAmerican && options[id].expiration <= timeOracle.getTime()) {
-            // ISpotPriceOracle oracle = spotPriceOracle(id);
-            // Allow OTM exercise: require(options[id].isCall ? oracle.getPrice() >= options[id].strike : oracle.getPrice() <= options[id].strike, "OTM");
-            exercise(holder, id, amount, true, toUnderlying); // Exercise long option
+            ISpotPriceOracle oracle = spotPriceOracle(id);
+            uint256 settlementPrice = oracle.getPrice();
+            require(options[id].isCall ? settlementPrice >= options[id].strike : settlementPrice <= options[id].strike, "OTM"); // Out of the money - but still has time value
+            exercise(holder, id, amount, settlementPrice, toUnderlying); // Exercise long option
             // Settle short named counterparties
             uint256 totalSettled; // = 0
             uint256 shortId = getOpposite(id);
             for (uint256 i = 0; i < _holders.length; i++) {
                 require(balanceOf(_holders[i], shortId) >= amounts[i], "Insufficient amount");
-                settle(_holders[i], shortId, amounts[i], true);
+                settle(_holders[i], shortId, amounts[i], settlementPrice, toUnderlying); // Settle short conterparty in the same desired currency
                 totalSettled += amounts[i];
             }
             require(amount == totalSettled, "Settlement amounts imbalance");
         } else {
             require(options[id].settlementPrice != 0, "No settlement price"); // Expired and settlement price set
             assert(timeOracle.getTime() > options[id].expiration); // BUG: Settlement price set before expiration
-            if (options[id].isCall ? options[id].settlementPrice <= options[id].strike : options[id].settlementPrice >= options[id].strike) { // Expire worthless
-                _burn(holder, id, balanceOf(holder, id)); // BTW, the collateral stays untouched
-            } else {
-                exercise(holder, id, amount, false, toUnderlying);
-            }
+            exercise(holder, id, amount, options[id].settlementPrice, toUnderlying);
         }
     }
 
     // Should only be called by exercise(uint256 id, uint256 amount, bool toUnderlying, address[] memory _holders, uint256[] memory amounts)
     // No checking - already checked in exercise(uint256 id, uint256 amount, bool toUnderlying, address[] memory _holders, uint256[] memory amounts)
-    function exercise(address holder, uint256 id, uint256 amount, bool spotNotSettlement, bool toUnderlying) internal {
+    function exercise(address holder, uint256 id, uint256 amount, uint256 settlementPrice, bool toUnderlying) internal {
         assert(msg.sender != address(this)); // BUG: This must be an internal function
-        uint256 baseId = collaterals.getId(id, true);
-        uint256 underlyingId = collaterals.getId(id, false);
         _burn(holder, id, amount); // Burn option - no collateralization issues as it is always a long holding
         ISpotPriceOracle oracle = spotPriceOracle(id);
-        uint256 convPrice;
         if (options[id].isCall) {
-            // Optimistically get the Underlying or a countervalue
-            convPrice = spotNotSettlement ? oracle.getPrice() : options[id].settlementPrice;
-            if (toUnderlying) { // Get as much underlying as needed and possible
-                uint256 underlyingToGet = amount;
-                uint256 underlyingAvailable = collaterals.totalSupply(underlyingId);
-                if (underlyingAvailable < underlyingToGet) {
-                    // Get the rest in base
-                    collaterals.mintCollateral(holder, baseId, oracle.toBase(underlyingToGet-underlyingAvailable, convPrice));
-                    underlyingToGet = underlyingAvailable;
-                }
-                collaterals.mintCollateral(holder, underlyingId, underlyingToGet);
+            if (options[id].strike >= settlementPrice) return; // Worthless
+            uint256 baseAmount = oracle.toBaseFromOption(amount, settlementPrice-options[id].strike);
+            if (toUnderlying) {
+                collaterals.mintCollateral(holder, collaterals.getId(id, false/*isBase*/), oracle.toSpot(baseAmount, settlementPrice));
             } else {
-                uint256 baseToGet = oracle.toBase(amount, convPrice);
-                uint256 baseAvailable = collaterals.totalSupply(baseId);
-                if (baseAvailable < baseToGet) {
-                    // Get the rest in underlying
-                    collaterals.mintCollateral(holder, underlyingId, oracle.toSpot(baseToGet-baseAvailable, convPrice));
-                    baseToGet = baseAvailable;
-                }
-                collaterals.mintCollateral(holder, baseId, baseToGet);
+                collaterals.mintCollateral(holder, collaterals.getId(id, true/*isBase*/), baseAmount);
             }
-            // Now pay for it in Base
-            convPrice = options[id].strike; // reduce stack space
-            collaterals.burnCollateral(holder, baseId, oracle.toBase(amount, convPrice)); // Fails if insufficient: should never happen if maintenance collateralization rules are good
-            // If not possible (the above reverts), the holder should convert collateral from underlying to base and retry - that's his responsibility
         } else { // is Put
-            // Optimistically get paid for the option
-            convPrice = options[id].strike;
-            collaterals.mintCollateral(holder, baseId, oracle.toBase(amount, convPrice));
-            // !!! Analyze if it's possible to end up with insufficient base to collect. Then the protocol has to step in and convert collateral from underlying to base.
-            // Now give the option or countervalue
-            uint256 underlyingToGive = amount;
-            uint256 underlyingIHave = collaterals.balanceOf(holder, underlyingId);
-            if (underlyingToGive > underlyingIHave) {
-                convPrice = spotNotSettlement ? oracle.getPrice() : options[id].settlementPrice;
-                // Pay for insufficient underlying in base
-                collaterals.burnCollateral(holder, baseId, oracle.toBase(underlyingToGive-underlyingIHave, convPrice));
-                underlyingToGive = underlyingIHave;
+            if (options[id].strike <= settlementPrice) return; // Worthless
+            uint256 baseAmount = oracle.toBaseFromOption(amount, options[id].strike-settlementPrice);
+            if (toUnderlying) {
+                collaterals.mintCollateral(holder, collaterals.getId(id, false/*isBase*/), oracle.toSpot(baseAmount, settlementPrice));
+            } else {
+                collaterals.mintCollateral(holder, collaterals.getId(id, true/*isBase*/), baseAmount);
             }
-            // Give underlying
-            collaterals.burnCollateral(holder, underlyingId, underlyingToGive);
         }
         emit Exercise(id, holder, amount, timeOracle.getTime(), toUnderlying);
     }
 
     // Should be called by the holder 
-
     function settle(address holder, uint256 id, bool toUnderlying) external {
         require(isAuthorizedExchange(id, msg.sender) || msg.sender == holder, "Unauthorized");
-        require(timeOracle.getTime() > options[id].expiration, "Not elligible");
+        require(timeOracle.getTime() > options[id].expiration, "Not expired");
+        require(options[id].settlementPrice != 0, "No settlement price");
         require(! options[id].isLong, "Only Writers can settle");
-        settle(holder, id, balanceOf(holder, id), toUnderlying);
+        settle(holder, id, balanceOf(holder, id), options[id].settlementPrice, toUnderlying);
     }
 
     // Should only be called by settle(id) or exercise(uint256 id, uint256 amount, bool toUnderlying, address[] memory _holders, uint256[] memory amounts)
     // No id checking - already checked in settle(id) or exercise(uint256 id, uint256 amount, bool toUnderlying, address[] memory _holders, uint256[] memory amounts)
-    function settle(address holder, uint256 id, uint256 amount, bool spotNotSettlement) internal {
+    function settle(address holder, uint256 id, uint256 amount, uint256 settlementPrice, bool toUnderlying) internal {
         assert(msg.sender != address(this)); // BUG: This must be an internal function
-        emit Settle(id, holder, amount, timeOracle.getTime(), spotNotSettlement);
+        emit Settle(id, holder, amount, timeOracle.getTime(), settlementPrice);
         uint256 baseId = collaterals.getId(id, true);
         uint256 underlyingId = collaterals.getId(id, false);
         ISpotPriceOracle oracle = spotPriceOracle(id);
-        {
-        (uint256 requirement, ) = collateralRequirement(holder, id, false);
-        collaterals.mintCollateral(holder, baseId, requirement); // Temporary, to avoid undercollateralization on transfer. Overkill, but who cares! Cheaper on gas to avoid exact calculation
+        // We will assume that the holder has enough collateral to settle the option - this is enforced by the liquidator
         _burn(holder, id, amount); // Burn the option
-        collaterals.burnCollateral(holder, baseId, requirement); // Reverse above temporary mint.
-        }
-        uint256 convPrice;
         if (options[id].isCall) {
-            // Optimistically get paid at strike price
-            convPrice = options[id].strike;
-            collaterals.mintCollateral(holder, baseId, oracle.toBase(amount, convPrice));
-            // Give the underlying or equivalent
-            uint256 underlyingToGive = amount;
-            uint256 underlyingIHave = collaterals.balanceOf(holder, underlyingId);
-            if (underlyingToGive > underlyingIHave) {
-                convPrice = spotNotSettlement ? oracle.getPrice() : options[id].settlementPrice;
-                // Pay for insufficient underlying in base
-                collaterals.burnCollateral(holder, baseId, oracle.toBase(underlyingToGive-underlyingIHave, convPrice));
-                underlyingToGive = underlyingIHave;
-            }
-            // Now give (rest in) underlying
-            collaterals.burnCollateral(holder, underlyingId, underlyingToGive);
+            if (options[id].strike >= settlementPrice) return; // Worthless
+            _burnCollateral(holder, id, oracle.toBaseFromOption(amount, settlementPrice-options[id].strike), settlementPrice, toUnderlying);
         } else { // is Put
-            // Optimistically get the underlying or equivalent
-            uint256 underlyingToGet = amount;
-            uint256 underlyingAvailable = collaterals.totalSupply(underlyingId);
-            if (underlyingAvailable < underlyingToGet) {
-                convPrice = spotNotSettlement ? oracle.getPrice() : options[id].settlementPrice;
-                // Get the rest in base
-                collaterals.mintCollateral(holder, baseId, oracle.toBase(underlyingToGet-underlyingAvailable, convPrice));
-                underlyingToGet = underlyingAvailable;
+            if (options[id].strike <= settlementPrice) return; // Worthless
+            _burnCollateral(holder, id, oracle.toBaseFromOption(amount, options[id].strike-settlementPrice), settlementPrice, toUnderlying);
+        }
+    }
+
+    function _burnCollateral(address holder, uint256 id, uint256 baseAmount, uint256 settlementPrice, bool toUnderlying) internal {
+        ISpotPriceOracle oracle = spotPriceOracle(id);
+        if (toUnderlying) {
+            uint256 underlyingAmount = oracle.toSpot(baseAmount, settlementPrice);
+            uint256 underlyingBalance = collaterals.balanceOf(holder, collaterals.getId(id, false/*isBase*/));
+            if (underlyingBalance < underlyingAmount) {
+                // Burn the rest in base
+                collaterals.burnCollateral(holder, collaterals.getId(id, true/*isBase*/), oracle.toBase(underlyingAmount-underlyingBalance, settlementPrice)); // Must have it - this is enforced by the liquidator
+                underlyingAmount = underlyingBalance;
             }
-            collaterals.mintCollateral(holder, underlyingId, underlyingToGet);
-            // Now pay in base at strike price
-            convPrice = options[id].strike;
-            collaterals.burnCollateral(holder, baseId, oracle.toBase(amount, convPrice));
+            collaterals.burnCollateral(holder, collaterals.getId(id, false/*isBase*/), underlyingAmount);
+        } else {
+            uint256 baseBalance = collaterals.balanceOf(holder, collaterals.getId(id, true/*isBase*/));
+            if (baseBalance < baseAmount) {
+                // Burn the rest in underlying
+                collaterals.burnCollateral(holder, collaterals.getId(id, false/*isBase*/), oracle.toSpot(baseAmount-baseBalance, settlementPrice)); // Must have it - this is enforced by the liquidator
+                baseAmount = baseBalance;
+            }
+            collaterals.burnCollateral(holder, collaterals.getId(id, true/*isBase*/), baseAmount);
         }
     }
 

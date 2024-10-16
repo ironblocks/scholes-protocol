@@ -955,14 +955,12 @@ contract OrderBookSettleTest is BaseTest {
             baseAmountDeposit - (uint256(makeTakeAmount) * feeAdjustedOptionPriceUsdc),
             underlyingAmountDeposit
         );
-        // Ensure account1's USDC balance reflects the outcome after selling the option and the underlying asset at strike price
+        // Ensure account1's USDC balance reflects the option price sold
         assertBalanceOf(
-            USDC,
-            account1,
-            (INITIAL_USDC_BALANCE + uint256(makeTakeAmount) * (strikePrice + optionPrice)) * (10 ** USDC.decimals())
+            USDC, account1, (INITIAL_USDC_BALANCE + uint256(makeTakeAmount) * optionPrice) * (10 ** USDC.decimals())
         );
-        // Ensure account1's WETH balance reflects the sale of the underlying asset (reduced by the number of options sold)
-        assertBalanceOf(WETH, account1, (INITIAL_WETH_BALANCE - uint256(makeTakeAmount)) * 10 ** WETH.decimals());
+        // Ensure account1's WETH balance accounts stays the same as it's settled to base (USDC)
+        assertBalanceOf(WETH, account1, INITIAL_WETH_BALANCE * 10 ** WETH.decimals());
         // account2's balances remains the same as after the deposit
         assertBalanceOf(USDC, account2, INITIAL_USDC_BALANCE * 10 ** USDC.decimals() - baseAmountDeposit);
         assertBalanceOf(WETH, account2, INITIAL_WETH_BALANCE * 10 ** WETH.decimals() - underlyingAmountDeposit);
@@ -1052,15 +1050,16 @@ contract OrderBookSettleTest is BaseTest {
             baseAmountDeposit + (uint256(makeTakeAmount) * feeAdjustedOptionPriceUsdc),
             underlyingAmountDeposit
         );
-        // Ensure account1's wallet USDC balance reflects the exercised option minus the option price
+        // Ensure account1's wallet USDC balance reflects the profit (in this case) from the price the change minus the option price
         assertBalanceOf(
             USDC,
             account1,
-            (INITIAL_USDC_BALANCE + uint256(makeTakeAmount) * (strikePrice - optionPrice)) * (10 ** USDC.decimals())
+            (INITIAL_USDC_BALANCE + uint256(makeTakeAmount) * (strikePrice - actualPrice - optionPrice))
+                * (10 ** USDC.decimals())
         );
-        // Ensure account1's WETH balance accounts for the settled amount
-        assertBalanceOf(WETH, account1, (INITIAL_WETH_BALANCE - uint256(makeTakeAmount)) * 10 ** WETH.decimals());
-        // account2's balances remains the same as after the deposit
+        // Ensure account1's WETH balance accounts stays the same as it's settled to base (USDC)
+        assertBalanceOf(WETH, account1, INITIAL_WETH_BALANCE * 10 ** WETH.decimals());
+        // Account2's balances remains the same as after the deposit
         assertBalanceOf(USDC, account2, INITIAL_USDC_BALANCE * 10 ** USDC.decimals() - baseAmountDeposit);
         assertBalanceOf(WETH, account2, INITIAL_WETH_BALANCE * 10 ** WETH.decimals() - underlyingAmountDeposit);
         // Account2 settles their position
@@ -1068,14 +1067,16 @@ contract OrderBookSettleTest is BaseTest {
         putDC2000OrderBook.settle(false);
         // All collateral is withdrawn for account2
         assertCollateralsBalances(collaterals, account2, longOptionId, 0, 0);
-        // Ensure account2's wallet USDC balance reflects the option premium received minus the bought ETH at strike price
+        // Ensure account2's USDC balance reflects the premium received, minus the loss (in this case) from the price change
         assertBalanceOf(
             USDC,
             account2,
-            (INITIAL_USDC_BALANCE - uint256(makeTakeAmount) * (strikePrice)) * (10 ** USDC.decimals())
-                + uint256(makeTakeAmount) * feeAdjustedOptionPriceUsdc
+            (
+                (INITIAL_USDC_BALANCE - uint256(makeTakeAmount) * (strikePrice - actualPrice)) * (10 ** USDC.decimals())
+                    + uint256(makeTakeAmount) * feeAdjustedOptionPriceUsdc
+            )
         );
-        // Ensure account2's WETH balance accounts for the settled amount (bought ETH)
-        assertBalanceOf(WETH, account2, (INITIAL_WETH_BALANCE + uint256(makeTakeAmount)) * 10 ** WETH.decimals());
+        // Ensure account2's WETH balance accounts stays the same as it's settled to base (USDC)
+        assertBalanceOf(WETH, account2, (INITIAL_WETH_BALANCE) * 10 ** WETH.decimals());
     }
 }
