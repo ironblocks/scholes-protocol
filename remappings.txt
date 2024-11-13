@@ -2,3 +2,5 @@ forge-std/=lib/forge-std/src/
 ds-test/=lib/forge-std/lib/ds-test/src/
 openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/
 chainlink/=lib/chainlink/contracts/src/v0.8/
+
+@ironblocks/firewall-consumer/=lib/ironblocks/onchain-firewall/packages/firewall-consumer/
