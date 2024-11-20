@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "forge-std/console.sol";
 import "chainlink/interfaces/AggregatorV3Interface.sol";
 import "openzeppelin-contracts/token/ERC1155/ERC1155.sol";
@@ -21,7 +22,7 @@ import "./interfaces/ITimeOracle.sol";
 import "./types/TSweepOrderParams.sol";
 import "./StSCH.sol";
 
-contract ScholesLiquidator is IScholesLiquidator, Ownable, ERC1155Holder {
+contract ScholesLiquidator is VennFirewallConsumer, IScholesLiquidator, Ownable, ERC1155Holder {
     IScholesOption options;
     IScholesCollateral collaterals;
     ISpotPriceOracleApprovedList spotPriceOracleApprovedList;
@@ -50,24 +51,30 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable, ERC1155Holder {
         stSCH = new StSCH("Staked SCH", "stSCH");
     }
 
+    error ExpiredOption();
+
     function estimateLiquidationPenalty(address holder, uint256 id) external view returns (uint256 penalty, uint256 collectable) {
-        require(timeOracle.getTime() <= options.getExpiration(id), "Expired option");
+        if (timeOracle.getTime() > options.getExpiration(id)) revert ExpiredOption();
         (uint256 requirement, uint256 possession) = options.collateralRequirement(holder, id, false);
         if (possession >= requirement) return(0, 0);
         penalty = (requirement - possession) * (LIQUIDATION_PENALTY_LIQUIDATOR + LIQUIDATION_PENALTY_PROTOCOL) / 1 ether; // Expressed in base
         collectable = possession > penalty ? penalty : possession;
     }
 
-    function liquidate(address holder, uint256 id, IOrderBook ob, TTakerEntry[] memory makers) external {
+    function liquidate(address holder, uint256 id, IOrderBook ob, TTakerEntry[] memory makers) external firewallProtected {
         liquidate(holder, id, ob, makers, /*maxSacrifice=*/0);
     }
 
+    error CannotLiquidateLong();
+    error NotUndercollateralized();
+    error IrrationalLiquidation();
+    error WrongOrderBook();
     // !!! Change next line to split penalty between liquidator and protocol and pay out the protocol part to the insurance fund
     function liquidate(address holder, uint256 id, IOrderBook ob, TTakerEntry[] memory makers, uint256 maxSacrifice) public {
-        require(! options.isLong(id), "Cannot liquidate long holding");
-        require(timeOracle.getTime() <= options.getExpiration(id), "Expired option");
+        if (options.isLong(id)) revert CannotLiquidateLong();
+        if (timeOracle.getTime() > options.getExpiration(id)) revert ExpiredOption();
         (uint256 requirement, uint256 possession) = options.collateralRequirement(holder, id, /*entry=*/false);
-        require(possession < requirement, "Not undercollateralized");
+        if (possession >= requirement) revert NotUndercollateralized();
         uint256 baseId = collaterals.getId(id, true);
         uint256 holderBalanceExOptMint = collaterals.balanceOf(holder, baseId);
         collaterals.mintCollateral(holder, baseId, /*maintenance*/requirement); // Temporary, to avoid undercollateralization on transfer. Overkill, but who cares! Cheaper on gas to avoid exact calculation
@@ -76,7 +83,7 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable, ERC1155Holder {
         { // Holder pays the penalty to liquidator optimistically
         // Liquidator does not get the premium built into this short position - it should be built into the liquidation penalty (discuss this)!!!
         uint256 penalty = (requirement - possession) * (LIQUIDATION_PENALTY_LIQUIDATOR) / 1 ether; // Expressed in base
-        require(maxSacrifice <= penalty, "Irrational liquidation");
+        if (maxSacrifice > penalty) revert IrrationalLiquidation();
         {
         uint256 baseToPay = penalty>holderBalanceExOptMint ? holderBalanceExOptMint : penalty;
         collaterals.proxySafeTransferFrom(/*irrelevant*/id, holder, msg.sender, baseId, baseToPay);
@@ -124,7 +131,7 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable, ERC1155Holder {
 
         // At this point the liquidator has the penalty and the option.
         if (makers.length > 0) {
-            require(ob.longOptionId() == options.getOpposite(id), "Wrong order book");
+            if (ob.longOptionId() != options.getOpposite(id)) revert WrongOrderBook();
             ob.vanish(msg.sender, makers, int256(amount));
         }
 
@@ -168,8 +175,10 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable, ERC1155Holder {
         return oracleSchBase.toBase(amount);
     }
 
+    error DustStake();
+
     function stake(uint256 amount) external {
-        require(amount > DUST, "Dust stake");
+        if (amount <= DUST) revert DustStake();
         uint256 stSchAmount = amount;
         uint256 bal = schToken.balanceOf(address(this));
         if (bal > DUST) {
@@ -180,8 +189,10 @@ contract ScholesLiquidator is IScholesLiquidator, Ownable, ERC1155Holder {
         stSCH.mint(msg.sender, stSchAmount);
     }
 
-    function unstake(uint256 amount) external {
-        require(amount > DUST, "Dust unstake");
+    error DustUnstake();
+
+    function unstake(uint256 amount) external firewallProtected {
+        if (amount <= DUST) revert DustUnstake();
         if (stSCH.totalSupply() < DUST) return;
         uint256 schAmount = (schToken.balanceOf(address(this)) * amount) / stSCH.totalSupply();
         stSCH.burn(msg.sender, amount);

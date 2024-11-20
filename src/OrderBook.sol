@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "forge-std/console.sol";
 import "./interfaces/IScholesOption.sol";
 import "./interfaces/IOrderBook.sol";
 import "openzeppelin-contracts/token/ERC1155/utils/ERC1155Holder.sol";
 
-contract OrderBook is IOrderBook, ERC1155Holder {
+contract OrderBook is VennFirewallConsumer, IOrderBook, ERC1155Holder {
     uint256 public constant MAKER_FEE = 0; // (0%) Ratio in 18 decimals
     uint256 public constant TAKER_FEE = 3 * 10 ** 15; // (0.3% = 3/1000) Ratio in 18 decimals
 
@@ -34,10 +35,12 @@ contract OrderBook is IOrderBook, ERC1155Holder {
     TOrderBookItem[] public bids; // bids[bidId]
     TOrderBookItem[] public offers; // offers[offerId]
 
+    error NotExpired();
+
     // Can be called by anyone permissionlessly to free up storage.
     // Usually called by OrderBookList.removeOrderBook.
-    function destroy() external {
-        require(scholesOptions.timeOracle().getTime() > scholesOptions.getExpiration(longOptionId), "Not expired");
+    function destroy() external firewallProtected {
+        if (scholesOptions.timeOracle().getTime() <= scholesOptions.getExpiration(longOptionId)) revert NotExpired();
         // selfdestruct(payable(msg.sender)); - deprecated
         delete bids;
         delete offers;
@@ -47,10 +50,13 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         return makes(msg.sender, amount, price, expiration);
     }
 
+    error NoAmount();
+    error ExpiredOrder();
+
     function makes(address maker, int256 amount, uint256 price, uint256 expiration) internal returns (uint256 id) {
-        require(scholesOptions.timeOracle().getTime() <= scholesOptions.getExpiration(longOptionId), "Expired option");
-        require(scholesOptions.timeOracle().getTime() <= expiration, "Expired order");
-        require(amount != 0, "No amount");
+        if (scholesOptions.timeOracle().getTime() > scholesOptions.getExpiration(longOptionId)) revert NotExpired();
+        if (scholesOptions.timeOracle().getTime() > expiration) revert ExpiredOrder();
+        if (amount == 0) revert NoAmount();
         if (amount > 0) { // Long
             id = bids.length;
             bids.push(TOrderBookItem(amount, price, expiration, maker, uniqidNonce));
@@ -67,14 +73,19 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         takes(msg.sender, id, amount, price);
     }
 
+    error WrongPrice();
+    error Self();
+    error InsufficientOffer();
+    error InsufficientBid();
+
     function takes(address taker, uint256 id, int256 amount, uint256 price) internal {
-        require(amount != 0, "No amount");
-        require(scholesOptions.timeOracle().getTime() <= scholesOptions.getExpiration(longOptionId), "Expired option");
+        if (amount == 0) revert NoAmount();
+        if (scholesOptions.timeOracle().getTime() > scholesOptions.getExpiration(longOptionId)) revert NotExpired();
         if (amount > 0) { // Buying from offer
-            require(price == offers[id].price, "Wrong price"); // In case order id changed before call was broadcasted
-            require(taker != offers[id].owner, "Self");
-            require(scholesOptions.timeOracle().getTime() <= offers[id].expiration, "Expired");
-            require(- offers[id].amount >= amount, "Insufficient offer");
+            if (price != offers[id].price) revert WrongPrice(); // In case order id changed before call was broadcasted
+            if (taker == offers[id].owner) revert Self();
+            if (scholesOptions.timeOracle().getTime() > offers[id].expiration) revert ExpiredOrder();
+            if (- offers[id].amount < amount) revert InsufficientOffer();
             offers[id].amount += amount;
             changePosition(offers[id].owner, taker, amount, offers[id].price); // Collateralization enforced within
             emit Take(id, offers[id].owner, taker, amount, price, offers[id].uniqid);
@@ -86,10 +97,10 @@ contract OrderBook is IOrderBook, ERC1155Holder {
                 transferCollateral(offers[id].owner, feeCollector, scholesOptions.spotPriceOracle(longOptionId).toBaseFromOption((uint256(amount) * MAKER_FEE) / 1 ether, price)); // Pay the fee
             }
         } else { // amount < 0 ; Selling to bid
-            require(price == bids[id].price, "Wrong price"); // In case order id changed before call was broadcasted
-            require(taker != bids[id].owner, "Self");
-            require(scholesOptions.timeOracle().getTime() <= bids[id].expiration, "Expired");
-            require(bids[id].amount >= -amount, "Insufficient bid");
+            if (price != bids[id].price) revert WrongPrice(); // In case order id changed before call was broadcasted
+            if (taker == bids[id].owner) revert Self();
+            if (scholesOptions.timeOracle().getTime() > bids[id].expiration) revert ExpiredOrder();
+            if (bids[id].amount >= -amount) revert InsufficientBid();
             bids[id].amount += amount;
             changePosition(bids[id].owner, taker, amount, bids[id].price); // Collateralization enforced within
             emit Take(id, bids[id].owner, taker, amount, price, bids[id].uniqid);
@@ -103,6 +114,10 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         }
     }
 
+    error InconsistentOrder();
+    error CannotForceFundingForSellOrders();
+    error TransferFailed();
+    error InconsistentComponentOrders();
     // Execute order by taking from the list makers and making at the end.
     // It is the caller's responsibility to ensure that the make orders for the given order ID exist and the prices match
     // as well as the amounts are sufficient.
@@ -112,10 +127,10 @@ contract OrderBook is IOrderBook, ERC1155Holder {
     /// @param makers The list of orders to take from.
     /// @param toMake The order to make at the end.
     /// @return id The ID of the order made.
-    function sweepAndMake(bool forceFunding, uint256 underlyingDepositRatio, TTakerEntry[] memory makers, TMakerEntry memory toMake) external returns (uint256 id) {
+    function sweepAndMake(bool forceFunding, uint256 underlyingDepositRatio, TTakerEntry[] memory makers, TMakerEntry memory toMake) external firewallProtected returns (uint256 id) {
         bool isBuy  = makers.length > 0 ? makers[0].amount > 0 : toMake.amount > 0;
-        require(isBuy ? toMake.amount >= 0 : toMake.amount <= 0, "Inconsistent order");
-        require(isBuy || !forceFunding, "Cannot force funding for sell orders");
+        if (isBuy ? toMake.amount < 0 : toMake.amount > 0) revert InconsistentOrder();
+        if (isBuy || !forceFunding) revert CannotForceFundingForSellOrders();
         // Take
         if (forceFunding /* && isBuy */) { // Collateralize with base collateral
             // Calculate funding
@@ -131,12 +146,12 @@ contract OrderBook is IOrderBook, ERC1155Holder {
             { // Safe ERC20 transfer - take the deposit from the caller
                 // bytes4(keccak256(bytes('transferFrom(address,address,uint256)')));
                 (bool success, bytes memory data) = address(scholesOptions.getBaseToken(longOptionId)).call(abi.encodeWithSelector(0x23b872dd, msg.sender, address(this), toDepositBase));
-                require(success && (data.length == 0 || abi.decode(data, (bool))), "Transfer failed");
+                if (!success && (data.length != 0 || !abi.decode(data, (bool)))) revert TransferFailed();
             }
             { // Safe ERC20 transfer - take the deposit from the caller
                 // bytes4(keccak256(bytes('transferFrom(address,address,uint256)')));
                 (bool success, bytes memory data) = address(scholesOptions.getUnderlyingToken(longOptionId)).call(abi.encodeWithSelector(0x23b872dd, msg.sender, address(this), toDepositUnderlying));
-                require(success && (data.length == 0 || abi.decode(data, (bool))), "Transfer failed");
+                if (!success && (data.length != 0 || !abi.decode(data, (bool)))) revert TransferFailed();
             }
             scholesOptions.getBaseToken(longOptionId).approve(address(scholesOptions.collaterals()), toDepositBase); // Approve the deposit into the collateral contract
             scholesOptions.getUnderlyingToken(longOptionId).approve(address(scholesOptions.collaterals()), toDepositUnderlying); // Approve the deposit into the collateral contract
@@ -145,7 +160,7 @@ contract OrderBook is IOrderBook, ERC1155Holder {
             scholesOptions.collaterals().safeTransferFrom(address(this), msg.sender, scholesOptions.collaterals().getId(uint256(longOptionId), false), toDepositUnderlying, ""); // Transfer the underlying collateral to the caller
         }
         for (uint256 index = 0; index < makers.length; index++) {
-            require(isBuy ? makers[index].amount > 0 : makers[index].amount < 0, "Inconsistent component orders");
+            if (isBuy ? makers[index].amount < 0 : makers[index].amount > 0) revert InconsistentComponentOrders();
             takes(msg.sender, makers[index].id, makers[index].amount, makers[index].price);
         }
         // Make
@@ -154,15 +169,18 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         }
     }
 
+    error VanishOversold();
+
+
     // Sell the list of long options up to the amount specified
-    function vanish(address liquidator, TTakerEntry[] memory makers, int256 amount) external {
+    function vanish(address liquidator, TTakerEntry[] memory makers, int256 amount) external firewallProtected {
         // Take
         for (uint256 index = 0; index < makers.length; index++) {
-            require(makers[index].amount < 0, "Inconsistent component orders");
+            if (makers[index].amount >= 0) revert InconsistentComponentOrders();
             amount += makers[index].amount;
             takes(liquidator, makers[index].id, makers[index].amount, makers[index].price);
         }
-        require(amount >= 0, "Vanish oversold");
+        if (amount >= 0) revert VanishOversold();
     }
 
     function changePosition(address from, address to, int256 amount, uint256 price) internal {
@@ -229,8 +247,10 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         }
     }
 
+    error Unauthorized();
+
     function cancel(bool isBid, uint256 id) public {
-        require(msg.sender == (isBid ? bids[id].owner : offers[id].owner), "Unauthorized");
+        if (msg.sender != (isBid ? bids[id].owner : offers[id].owner)) revert Unauthorized();
         uint256 uniqid = isBid ? bids[id].uniqid : offers[id].uniqid;
         removeOrder(isBid, id);
         emit Cancel(isBid, id, uniqid);
@@ -254,12 +274,14 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         }
     }
 
+    error OutOfBounds();
+
     function status(bool isBid, uint256 id) external view returns (int256 amount, uint256 price, uint256 expiration, address owner) {
         if (isBid) {
-            require(bids.length > id, "Out of bounds");
+            if (bids.length <= id) revert OutOfBounds();
             return (bids[id].amount, bids[id].price, bids[id].expiration, bids[id].owner);
         } else {
-            require(offers.length > id, "Out of bounds");
+            if (offers.length <= id) revert OutOfBounds();
             return (offers[id].amount, offers[id].price, offers[id].expiration, offers[id].owner);
         }
     }
@@ -273,8 +295,8 @@ contract OrderBook is IOrderBook, ERC1155Holder {
         return ((isBid && msg.sender == bids[id].owner) || (!isBid && msg.sender == offers[id].owner));
     }
 
-    function settle(bool toUnderlying) external {
-        require(scholesOptions.timeOracle().getTime() > scholesOptions.getExpiration(longOptionId), "Not expired");
+    function settle(bool toUnderlying) external firewallProtected {
+        if (scholesOptions.timeOracle().getTime() <= scholesOptions.getExpiration(longOptionId)) revert NotExpired();
         if (scholesOptions.getSettlementPrice(longOptionId) == 0) {
             scholesOptions.setSettlementPrice(longOptionId);
         }

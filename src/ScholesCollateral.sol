@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "forge-std/console.sol";
 import "openzeppelin-contracts/token/ERC1155/ERC1155.sol";
 import "openzeppelin-contracts/security/Pausable.sol";
@@ -12,7 +13,7 @@ import "./interfaces/IScholesOption.sol";
 import "./interfaces/IScholesCollateral.sol";
 import "./interfaces/IScholesLiquidator.sol";
 
-contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ERC1155Supply {
+contract ScholesCollateral is VennFirewallConsumer, IScholesCollateral, ERC1155, Pausable, Ownable, ERC1155Supply {
     IScholesOption options;
     IScholesLiquidator liquidator;
 
@@ -26,7 +27,7 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         options = IScholesOption(_options);
     }
 
-    function setFriendContracts() external onlyOwner {
+    function setFriendContracts() external onlyOwner firewallProtected {
         liquidator = IScholesLiquidator(options.liquidator());
     }
 
@@ -57,11 +58,11 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         return super.totalSupply(id);
     }
 
-    function mintCollateral(address to, uint256 id, uint256 amount) external onlyOptionsOrLiquidator {
+    function mintCollateral(address to, uint256 id, uint256 amount) external onlyOptionsOrLiquidator firewallProtected {
         _mint(to, id, amount, "");
     }
 
-    function burnCollateral(address from, uint256 id, uint256 amount) external onlyOptionsOrLiquidator {
+    function burnCollateral(address from, uint256 id, uint256 amount) external onlyOptionsOrLiquidator firewallProtected {
         _burn(from, id, amount);
     }
 
@@ -79,7 +80,7 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         require(success && (data.length == 0 || abi.decode(data, (bool))), "Transfer failed");
     }
 
-    function deposit(uint256 optionId, uint256 baseAmount, uint256 underlyingAmount) external {
+    function deposit(uint256 optionId, uint256 baseAmount, uint256 underlyingAmount) external firewallProtected {
         require(!options.isSingleCollateral(optionId) ||
                 (options.isCall(optionId) ? baseAmount == 0 : underlyingAmount == 0), "Not single collateral");
         safeTransferERC20From(address(options.getBaseToken(optionId)), msg.sender, address(this), baseAmount); // Can revert
@@ -98,7 +99,7 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         emit Deposit(msg.sender, optionId, baseAmount, underlyingAmount);
     }
 
-    function withdraw(uint256 optionId, uint256 baseAmount, uint256 underlyingAmount) external {
+    function withdraw(uint256 optionId, uint256 baseAmount, uint256 underlyingAmount) external firewallProtected {
         withdrawTo(optionId, msg.sender, baseAmount, underlyingAmount);
     }
 
@@ -121,7 +122,7 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         emit Withdraw(msg.sender, to, optionId, baseAmount, underlyingAmount);
     }
 
-    function withdrawToAsPossible(uint256 optionId, address to, uint256 baseAmount, uint256 underlyingAmount, uint256 conversionPrice) external {
+    function withdrawToAsPossible(uint256 optionId, address to, uint256 baseAmount, uint256 underlyingAmount, uint256 conversionPrice) external firewallProtected {
         if (options.getBaseToken(optionId).balanceOf(address(this)) < baseAmount) {
             uint256 baseDiff = baseAmount - options.getBaseToken(optionId).balanceOf(address(this));
             uint256 underlyingDiff = options.spotPriceOracle(optionId).toSpot(baseDiff, conversionPrice);
@@ -152,7 +153,7 @@ contract ScholesCollateral is IScholesCollateral, ERC1155, Pausable, Ownable, ER
         underlyingBalance = bal[1];
     }
 
-    function proxySafeTransferFrom(uint256 optionId, address from, address to, uint256 id, uint256 amount) external onlyExchangeLiquidatorOrOptions(optionId) {
+    function proxySafeTransferFrom(uint256 optionId, address from, address to, uint256 id, uint256 amount) external onlyExchangeLiquidatorOrOptions(optionId) firewallProtected {
         _safeTransferFrom(from, to, id, amount, "");
     }
 

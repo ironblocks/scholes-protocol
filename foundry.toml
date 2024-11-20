@@ -4,7 +4,8 @@ out = 'out'
 libs = ['lib']
 solc = "0.8.16"  # replace with your Solidity version
 optimizer = true  # enable the optimizer
-optimizer_runs = 200  # specify the number of optimization runs
+optimizer_runs = 1  # specify the number of optimization runs
+via_ir = true
 
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

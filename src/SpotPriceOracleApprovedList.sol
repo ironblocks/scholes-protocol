@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "openzeppelin-contracts/access/Ownable.sol";
 
 import "./interfaces/ISpotPriceOracle.sol";
 import "./interfaces/ISpotPriceOracleApprovedList.sol";
 
-contract SpotPriceOracleApprovedList is ISpotPriceOracleApprovedList, Ownable {
+contract SpotPriceOracleApprovedList is VennFirewallConsumer, ISpotPriceOracleApprovedList, Ownable {
     mapping (address => bool) approved;
     mapping (address => mapping (address => ISpotPriceOracle)) oracles; // spot => (base => oracle)
 
-    function addOracle(ISpotPriceOracle oracle) external onlyOwner {
+    function addOracle(ISpotPriceOracle oracle) external onlyOwner firewallProtected {
         approved[address(oracle)] = true;
         oracles[address(oracle.spotToken())][address(oracle.baseToken())] = oracle;
     }

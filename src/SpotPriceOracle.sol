@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.13;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "openzeppelin-contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "chainlink/interfaces/AggregatorV3Interface.sol";
 
 import "./interfaces/ISpotPriceOracle.sol";
 
-contract SpotPriceOracle is ISpotPriceOracle {
+contract SpotPriceOracle is VennFirewallConsumer, ISpotPriceOracle {
     AggregatorV3Interface public chainLinkPriceFeed;
     IERC20Metadata public spotToken;
     IERC20Metadata public baseToken;
@@ -33,7 +34,7 @@ contract SpotPriceOracle is ISpotPriceOracle {
     }
 
     // DANGEROUS!!! WARNING - Use only for testing! Remove before mainnet deployment.
-    function setMockPrice(uint256 price) external {
+    function setMockPrice(uint256 price) external firewallProtected {
         // require(msg.sender == owner, "Unauthorized");
         mockPrice = price;
     }

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.13;
 
-import "forge-std/console.sol";
 import "openzeppelin-contracts/access/Ownable.sol";
 import "./types/TOptionParams.sol";
 import "./types/TCollateralRequirements.sol";
@@ -11,7 +10,7 @@ import "./interfaces/IScholesCollateral.sol";
 import "./interfaces/IOrderBookList.sol";
 import "./OrderBook.sol";
 
-contract OrderBookList is IOrderBookList, Ownable {
+contract OrderBookList is VennFirewallConsumer, IOrderBookList, Ownable {
     IOrderBook[] public list;
     IScholesOption public scholesOptions;
     address feeCollector;
@@ -24,9 +23,11 @@ contract OrderBookList is IOrderBookList, Ownable {
     function getLength() external view returns (uint256) {
         return list.length;
     }
+
+    error OutOfBounds();
     
     function getOrderBook(uint256 index) external view returns (IOrderBook) {
-        require(index < list.length, "Out of bounds");
+        if (index >= list.length) revert OutOfBounds();
         return list[index];
     }
 
@@ -39,7 +40,7 @@ contract OrderBookList is IOrderBookList, Ownable {
     }
 
     function removeOrderBook(uint256 index) external {
-        require(index < list.length, "Out of bounds");
+        if (index >= list.length) revert OutOfBounds();
         IOrderBook ob = list[index];
         emit Remove(index, address(ob), ob.longOptionId());
         ob.destroy(); // Clear storage
