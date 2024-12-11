@@ -14,13 +14,14 @@ import "../src/types/TOptionParams.sol";
 import "../src/types/TCollateralRequirements.sol";
 import "../src/MockERC20.sol";
 import "../src/MockTimeOracle.sol";
+import "../lib/chainlink/contracts/src/v0.8/tests/MockV3Aggregator.sol";
 
 contract Deploy is Script {
     // Test accounts from passphrase in env (not in repo)
-    address constant account0 = 0x1FE2BD1249b9dC89F497052630d393657E62d36a;
-    address constant account1 = 0xAA1AD0696F3f970eE4619DD646C12600b003b1b5;
-    address constant account2 = 0x264F92eac76DA3244EDc7dD89eC3c7AcC719BE2a;
-    address constant account3 = 0x4eBBf92803dfb004b543d4DB592D9C32C0a830A9;
+    address constant account0 = 0x4Feed3536D1b2462bA85235bd05c1e5C88fc4072;
+    address constant account1 = 0xE7933e22229Bd7e1368E4BB221873adFdD16f941;
+    address constant account2 = 0xAa084b92d92182F0744A983696f5D095f309014E;
+    address constant account3 = 0x4b8a90E1637bEd9eF20085C967b0f4D617A4Ee89;
 
     // Networks we are deploying to
     uint256 constant SEPOLIA_CHAINID = 11155111; // Sepolia
@@ -35,6 +36,8 @@ contract Deploy is Script {
     uint256 constant OP_CHAINID = 10; // Optimism Mainnet
     uint256 constant OP_SEPOLIA_CHAINID = 11155420; // Optimism Sepolia Testnet
 
+    uint256 constant HOLESKY_CHAINID = 17000; // Holesky Testnet
+
     // Use https://www.unixtimestamp.com/ to get the timestamp for the expiration dates
     uint256 constant EXPIRATION_1 = 1 weeks;
     uint256 constant EXPIRATION_2 = 2 weeks;
@@ -48,6 +51,9 @@ contract Deploy is Script {
         if (block.chainid == ARBITRUM_GORLI_CHAINID) {
             chainlinkEthUsd = 0x62CAe0FA2da220f43a51F86Db2EDb36DcA9A5A08;
             chainlinkBtcUsd = 0x6550bc2301936011c1334555e62A87705A81C12C;
+        } else if (block.chainid == HOLESKY_CHAINID) {
+            chainlinkEthUsd = address(new MockV3Aggregator(18, 4000 * 10 ** 18));
+            chainlinkBtcUsd = address(new MockV3Aggregator(18, 100000 * 10 ** 18));
         } else if (block.chainid == SEPOLIA_CHAINID) {
             chainlinkEthUsd = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
             chainlinkBtcUsd = 0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43;
@@ -101,6 +107,7 @@ contract Deploy is Script {
         console.log("OrderBookList deployed: ", address(obList));
 
         ITimeOracle mockTimeOracle = new MockTimeOracle();
+        MockTimeOracle(address(mockTimeOracle)).setMockTime(block.timestamp);
         console.log("MockTimeOracle deployed: ", address(mockTimeOracle));
         
         options.setFriendContracts(address(collaterals), address(liquidator), address(oracleList), address(obList), address(mockTimeOracle), address(SCH));
@@ -178,7 +185,7 @@ contract Deploy is Script {
 
         // Test Options:
 
-        uint256 timeNow = options.timeOracle().getTime();
+        uint256 timeNow = options.timeOracle().getTime() + EXPIRATION_4;
         {
             TOptionParams memory opt;
             opt.underlying = WETH;

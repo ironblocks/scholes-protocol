@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import "openzeppelin-contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
-contract MockERC20 is IERC20Metadata {
+contract MockERC20 is VennFirewallConsumer, IERC20Metadata {
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
     string public name;
@@ -18,14 +19,14 @@ contract MockERC20 is IERC20Metadata {
         balanceOf[msg.sender] = totalSupply;
     }
 
-    function transfer(address recipient, uint256 amount) external returns (bool) {
+    function transfer(address recipient, uint256 amount) external firewallProtected returns (bool) {
         balanceOf[msg.sender] -= amount;
         balanceOf[recipient] += amount;
         emit Transfer(msg.sender, recipient, amount);
         return true;
     }
 
-    function approve(address spender, uint256 amount) external returns (bool) {
+    function approve(address spender, uint256 amount) external firewallProtected returns (bool) {
         allowance[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
         return true;
@@ -35,7 +36,7 @@ contract MockERC20 is IERC20Metadata {
         address sender,
         address recipient,
         uint256 amount
-    ) external returns (bool) {
+    ) external firewallProtected returns (bool) {
         allowance[sender][msg.sender] -= amount;
         balanceOf[sender] -= amount;
         balanceOf[recipient] += amount;

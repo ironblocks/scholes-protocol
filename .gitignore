@@ -24,3 +24,5 @@ docs/
 
 # Dotenv file
 .env
+
+venn-scripts/node_modules/*
